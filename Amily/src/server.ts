@@ -45,6 +45,14 @@ import {
   type WeatherData,
 } from './wellness';
 
+// Lightweight in-memory chat "memory" per user for the ChatBox
+type ChatMemory = {
+  lastEmotion?: 'stressed' | 'confused' | 'lonely' | 'calm';
+  reminderAsked?: boolean;
+};
+
+const chatMemory = new Map<string, ChatMemory>();
+
 const app = express();
 
 // Middleware
@@ -188,6 +196,96 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Something went wrong while logging you in.',
+    });
+  }
+});
+
+/**
+ * POST /api/chatbox
+ * Unified chat endpoint for reminders, emotion detection, suggestions & lightweight memory
+ */
+app.post('/api/chatbox', async (req: Request, res: Response) => {
+  try {
+    const { userId = 'anonymous', input } = req.body as { userId?: string; input?: string };
+
+    if (!input || !input.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please share a little about how you are feeling.',
+      });
+    }
+
+    const trimmedUserId = String(userId || 'anonymous');
+    const memory = chatMemory.get(trimmedUserId) || {};
+    const firstTurn = !memory.reminderAsked;
+
+    // Emotion detection (text-based proxy for voice emotion)
+    const emotion = detectEmotion(input);
+    memory.lastEmotion = emotion;
+    memory.reminderAsked = true;
+    chatMemory.set(trimmedUserId, memory);
+
+    // Build reminder question on first turn
+    const reminderQuestion = firstTurn
+      ? "Before we talk more… may I gently check: have you taken your pills, had something to eat, and had some water today?"
+      : '';
+
+    // Suggestions based on emotion
+    const suggestions: string[] = [];
+    if (emotion === 'lonely') {
+      suggestions.push(
+        'We could save a special story together in MemoryLane.',
+        'We might send a little voice message to a buddy so you feel less alone.'
+      );
+    } else if (emotion === 'stressed') {
+      suggestions.push(
+        'We can try a very short breathing moment together.',
+        'If you feel up to it, a tiny walk or stretch could help your body relax.'
+      );
+    } else if (emotion === 'confused') {
+      suggestions.push(
+        'We can keep today simple and walk through things one by one.',
+        'If you like, we could record a note in MemoryLane so you do not have to remember everything yourself.'
+      );
+    } else {
+      suggestions.push(
+        'Maybe we could check in together about how your day is going.',
+        'If you wish, we could reach out to a buddy or look at a happy memory.'
+      );
+    }
+
+    const suggestionText = suggestions.join(' ');
+
+    // Core empathetic response
+    const baseResponse = generateEmpatheticResponse(emotion);
+
+    let fullResponse = baseResponse;
+    if (firstTurn) {
+      fullResponse += ' ' + reminderQuestion;
+    }
+    fullResponse += ' ' + suggestionText;
+
+    const ttsText = formatForTTS(fullResponse, { includeReassurance: true });
+    const audioUrl = await generateTTS(ttsText);
+
+    res.json({
+      success: true,
+      mode: config.mode,
+      data: {
+        emotion,
+        firstTurn,
+        reminderQuestion: firstTurn ? reminderQuestion : null,
+        suggestions,
+      },
+      ttsText,
+      audioUrl,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('ChatBox error:', error);
+    res.status(500).json({
+      success: false,
+      error: "I had trouble answering just now… can we try again in a moment?",
     });
   }
 });

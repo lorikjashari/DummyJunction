@@ -31,30 +31,43 @@ if (config.keys.supabaseUrl && config.keys.supabaseKey) {
  * ElevenLabs TTS Integration
  */
 export async function generateTTS(text: string): Promise<string> {
-  if (config.mode === 'demo') {
-    // Return placeholder audio URL in demo mode
+  // If no real ElevenLabs key or still in explicit demo mode, keep placeholder behaviour
+  if (!config.keys.elevenLabs || config.mode === 'demo') {
     const audioUrl = `demo://audio${demoAudioCounter++}.mp3`;
     console.log(`🎵 [DEMO] Generated TTS: "${text.substring(0, 50)}..." → ${audioUrl}`);
     return audioUrl;
   }
-  
-  // Production: Call ElevenLabs API
+
   try {
-    // Placeholder for actual ElevenLabs integration
-    // const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/...', {
-    //   method: 'POST',
-    //   headers: {
-    //     'xi-api-key': config.keys.elevenLabs!,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     text,
-    //     voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-    //   })
-    // });
-    
-    console.log(`🎵 [PROD] Would call ElevenLabs API for: "${text.substring(0, 50)}..."`);
-    return `https://storage.example.com/audio/${Date.now()}.mp3`;
+    const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Default "Rachel" voice from ElevenLabs docs
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': config.keys.elevenLabs!,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_monolingual_v1',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      console.error('ElevenLabs API error:', response.status, errText);
+      return `demo://audio-fallback-${demoAudioCounter++}.mp3`;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    const dataUrl = `data:audio/mpeg;base64,${base64}`;
+    console.log(`🎵 [PROD] Generated TTS via ElevenLabs for: "${text.substring(0, 50)}..."`);
+    return dataUrl;
   } catch (error) {
     console.error('ElevenLabs API error:', error);
     return `demo://audio-fallback-${demoAudioCounter++}.mp3`;

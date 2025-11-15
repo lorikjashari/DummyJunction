@@ -88,7 +88,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
         const { createRoot } = ReactDOM;
 
         // Icon Components
@@ -200,7 +200,8 @@
                 { id: 'safety', label: 'Safety' },
                 { id: 'wellness', label: 'Wellness' },
                 { id: 'memories', label: 'Memories' },
-                { id: 'empathy', label: 'Support' }
+                { id: 'empathy', label: 'Support' },
+                { id: 'chatbox', label: 'Chat' }
             ];
 
             const getStatusColor = () => {
@@ -1309,6 +1310,217 @@
             );
         }
 
+        // ChatBox Voice UI
+        function ChatBoxPage({ darkMode }) {
+            const [messages, setMessages] = useState([]);
+            const [isListening, setIsListening] = useState(false);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const recognitionRef = useRef(null);
+
+            useEffect(() => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    setError('Voice input is not available in this browser. Please use Chrome on desktop.');
+                    return;
+                }
+
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'en-US';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = () => {
+                    setIsListening(true);
+                    setError(null);
+                };
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event);
+                    setIsListening(false);
+                    setError('I had trouble hearing you. Please try again.');
+                };
+                recognition.onend = () => {
+                    setIsListening(false);
+                };
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    handleSend(transcript);
+                };
+
+                recognitionRef.current = recognition;
+
+                return () => {
+                    recognition.abort();
+                };
+            }, []);
+
+            const handleSend = async (text) => {
+                if (!text || !text.trim()) return;
+
+                setMessages((prev) => [...prev, { type: 'user', text }]);
+                setIsLoading(true);
+
+                try {
+                    const res = await fetch('/api/chatbox', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: 'voice-user',
+                            input: text,
+                        }),
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success) {
+                        setError(data.error || 'Something went wrong while talking to Amily.');
+                    } else {
+                        const aiText = data.ttsText || data.data?.response || 'I am here with you.';
+                        setMessages((prev) => [...prev, { type: 'amily', text: aiText, emotion: data.data?.emotion }]);
+
+                        if (data.audioUrl) {
+                            try {
+                                const audio = new Audio(data.audioUrl);
+                                audio.play().catch((err) => {
+                                    console.warn('Could not play audio:', err);
+                                });
+                            } catch (err) {
+                                console.warn('Audio element error:', err);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('ChatBox request error:', err);
+                    setError('Network error while talking to Amily.');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const startListening = () => {
+                if (!recognitionRef.current) {
+                    setError('Voice input is not available in this browser.');
+                    return;
+                }
+                setError(null);
+                recognitionRef.current.start();
+            };
+
+            return (
+                <section id="chatbox" className="relative py-20">
+                    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex flex-col gap-3 mb-8 text-center sm:text-left">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-semibold uppercase tracking-[0.26em] mx-auto sm:mx-0 bg-black/5 backdrop-blur-sm">
+                                <HeartIcon />
+                                <span className={darkMode ? 'text-rose-200' : 'text-rose-600'}>Voice ChatBox</span>
+                            </div>
+                            <div className="space-y-1">
+                                <h2 className={`font-display text-3xl sm:text-4xl font-bold ${
+                                    darkMode ? 'text-slate-50' : 'text-slate-900'
+                                }`}>
+                                    Talk to Amily with your voice.
+                                </h2>
+                                <p className={darkMode ? 'text-slate-400 text-sm sm:text-base' : 'text-slate-600 text-sm sm:text-base'}>
+                                    Press the microphone, share how you feel, and Amily will listen, respond, and speak back to you.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            className={`rounded-3xl border shadow-2xl overflow-hidden backdrop-blur-xl ${
+                                darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-rose-100'
+                            }`}
+                        >
+                            <div className="p-6 sm:p-8 grid gap-8 lg:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
+                                <div className="space-y-6 flex flex-col justify-between">
+                                    <div className="space-y-4">
+                                        <p className={darkMode ? 'text-slate-300 text-sm' : 'text-slate-700 text-sm'}>
+                                            When you speak, Amily will gently check on things like medication, food, and water,
+                                            listen for how you feel, and suggest kind next steps.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={startListening}
+                                            disabled={isListening || isLoading}
+                                            className={`inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full text-sm font-semibold shadow-lg border transition-all duration-200 ${
+                                                darkMode
+                                                    ? 'bg-slate-950 border-rose-500/60 text-slate-50 hover:bg-slate-900'
+                                                    : 'bg-white border-rose-300 text-rose-700 hover:bg-rose-50'
+                                            } ${isListening || isLoading ? 'opacity-60 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
+                                        >
+                                            <span className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                                                isListening ? 'bg-rose-500 animate-pulse' : 'bg-rose-500/80'
+                                            }`}>
+                                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1v11m0 0a3 3 0 003-3V5a3 3 0 10-6 0v4a3 3 0 003 3zm0 0v5m-4 0h8" />
+                                                </svg>
+                                            </span>
+                                            <span>{isListening ? 'Listening… speak gently to Amily' : 'Press to talk to Amily'}</span>
+                                        </button>
+                                        {error && (
+                                            <div className="text-xs px-3 py-2 rounded-2xl bg-red-900/40 border border-red-500/60 text-red-100">
+                                                {error}
+                                            </div>
+                                        )}
+                                        {isLoading && (
+                                            <div className="text-xs px-3 py-2 rounded-2xl bg-slate-900/40 border border-slate-700/60 text-slate-100">
+                                                Amily is thinking about what to say back…
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500">
+                                        Voice input works best in a quiet room, speaking slowly and clearly.
+                                    </div>
+                                </div>
+
+                                <div
+                                    className={`rounded-2xl p-5 max-h-80 overflow-y-auto space-y-4 text-sm bg-gradient-to-b ${
+                                        darkMode ? 'from-slate-950/90 via-slate-900/75 to-slate-900/60 border border-slate-800' : 'from-rose-50 via-white to-rose-50/80 border border-rose-100'
+                                    }`}
+                                >
+                                    {messages.length === 0 ? (
+                                        <div className="text-center py-10">
+                                            <p className={darkMode ? 'text-slate-400 text-sm' : 'text-slate-500 text-sm'}>
+                                                Press the microphone and tell Amily how you are feeling today.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        messages.map((msg, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                                            >
+                                                <div
+                                                    className={`max-w-md rounded-2xl px-4 py-3 shadow-md ${
+                                                        msg.type === 'user'
+                                                            ? darkMode
+                                                                ? 'bg-slate-950 border border-slate-700 text-slate-100'
+                                                                : 'bg-white border border-slate-200 text-slate-800'
+                                                            : 'bg-gradient-to-br from-rose-500 to-red-500 text-white'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <div className="font-semibold text-[11px] opacity-80">
+                                                            {msg.type === 'user' ? 'You' : 'Amily'}
+                                                        </div>
+                                                        {msg.emotion && msg.type === 'amily' && (
+                                                            <div className="text-[10px] opacity-80">
+                                                                felt: {msg.emotion}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="leading-relaxed whitespace-pre-line">{msg.text}</div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
         // Login Page
         function LoginPage({ darkMode, onAuthSuccess }) {
             const [email, setEmail] = useState('');
@@ -1778,6 +1990,7 @@
                         {currentPage === 'wellness' && <WellnessDemo darkMode={darkMode} />}
                         {currentPage === 'memories' && <MemoryDemo darkMode={darkMode} />}
                         {currentPage === 'empathy' && <EmpathyDemo darkMode={darkMode} />}
+                        {currentPage === 'chatbox' && <ChatBoxPage darkMode={darkMode} />}
                         {currentPage === 'login' && (
                             <LoginPage
                                 darkMode={darkMode}
