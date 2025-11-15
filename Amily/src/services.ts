@@ -1,15 +1,15 @@
 /**
  * Service Integrations
  * 
- * Handles all external API calls with demo/prod mode support
+ * Handles all external API calls - requires real API keys and database
  */
 
 import { config } from './config';
-import type { PlanJSON, MemoryJSON, SummaryJSON } from './schemas';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { detectEmotion, generateEmpatheticResponse } from './persona';
 
-// Demo audio counter for generating unique placeholder URLs
-let demoAudioCounter = 1;
+export const GEMINI_CHAT_MODEL = 'gemini-2.0-flash';
+export const ELEVENLABS_TTS_MODEL = 'eleven_monolingual_v1';
 
 // Supabase client (only initialized in prod mode when keys are present)
 let supabase: SupabaseClient | null = null;
@@ -24,20 +24,17 @@ if (config.keys.supabaseUrl && config.keys.supabaseKey) {
     console.error('Failed to initialize Supabase client:', error);
   }
 } else {
-  console.warn('Supabase URL/key missing – database features will use demo logging only.');
+  console.warn('Supabase URL/key missing – database features will not be available.');
 }
 
 /**
  * ElevenLabs TTS Integration
+ * (single source of "generation" now – no demo audio)
  */
 export async function generateTTS(text: string): Promise<string> {
-  // If no real ElevenLabs key or still in explicit demo mode, keep placeholder behaviour
-  if (!config.keys.elevenLabs || config.mode === 'demo') {
-    const audioUrl = `demo://audio${demoAudioCounter++}.mp3`;
-    console.log(`🎵 [DEMO] Generated TTS: "${text.substring(0, 50)}..." → ${audioUrl}`);
-    return audioUrl;
+  if (!config.keys.elevenLabs) {
+    throw new Error('ELEVENLABS_API_KEY is missing – cannot generate audio.');
   }
-
   try {
     const voiceId = '21m00Tcm4TlvDq8ikWAM'; // Default "Rachel" voice from ElevenLabs docs
     const response = await fetch(
@@ -45,13 +42,13 @@ export async function generateTTS(text: string): Promise<string> {
       {
         method: 'POST',
         headers: {
-          'xi-api-key': config.keys.elevenLabs!,
+          'xi-api-key': config.keys.elevenLabs,
           'Content-Type': 'application/json',
           Accept: 'audio/mpeg',
         },
         body: JSON.stringify({
           text,
-          model_id: 'eleven_monolingual_v1',
+          model_id: ELEVENLABS_TTS_MODEL,
           voice_settings: { stability: 0.5, similarity_boost: 0.75 },
         }),
       }
@@ -60,7 +57,9 @@ export async function generateTTS(text: string): Promise<string> {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       console.error('ElevenLabs API error:', response.status, errText);
-      return `demo://audio-fallback-${demoAudioCounter++}.mp3`;
+      throw new Error(
+        `ElevenLabs API error: ${response.status} ${errText || ''}`.trim()
+      );
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -70,78 +69,7 @@ export async function generateTTS(text: string): Promise<string> {
     return dataUrl;
   } catch (error) {
     console.error('ElevenLabs API error:', error);
-    return `demo://audio-fallback-${demoAudioCounter++}.mp3`;
-  }
-}
-
-/**
- * Gemini AI Integration for structured JSON generation
- */
-export async function generateWithGemini<T>(
-  prompt: string,
-  schema: 'plan' | 'memory' | 'summary'
-): Promise<T> {
-  if (config.mode === 'demo') {
-    // Return demo data matching the schema
-    const demoData = getDemoData(schema);
-    console.log(`🤖 [DEMO] Gemini response for ${schema}:`, demoData);
-    return demoData as T;
-  }
-  
-  // Production: Call Gemini API
-  try {
-    // Placeholder for actual Gemini integration
-    // const response = await fetch('https://generativelanguage.googleapis.com/v1/...', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${config.keys.gemini}`,
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({ prompt, schema })
-    // });
-    
-    console.log(`🤖 [PROD] Would call Gemini API for ${schema}`);
-    return getDemoData(schema) as T;
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    return getDemoData(schema) as T;
-  }
-}
-
-/**
- * Get demo data for different schemas
- */
-function getDemoData(schema: string): PlanJSON | MemoryJSON | SummaryJSON {
-  switch (schema) {
-    case 'plan':
-      return {
-        summary: "Let's take the day slowly… a little movement, some rest, and maybe a chat.",
-        next_step: "How about a short walk after breakfast?",
-        mood: 'ok' as const,
-        tags: ['routine', 'mobility'],
-      };
-    
-    case 'memory':
-      return {
-        title: "The Old Oak Tree",
-        era: "Childhood, 1950s",
-        story_3_sentences: "There was this big oak tree behind our house. My brother and I would climb it every summer. We'd sit up there for hours, watching the world go by.",
-        tags: ['family', 'childhood'],
-        quote: "We felt like we could see the whole world from up there.",
-      };
-    
-    case 'summary':
-      return {
-        summary: "Your friend sent a warm hello… they're thinking of you today.",
-        tone: 'warm' as const,
-        suggestion: "Maybe send a little message back when you're ready?",
-      };
-    
-    default:
-      return {
-        summary: "Everything looks good.",
-        tone: 'warm' as const,
-      };
+    throw error;
   }
 }
 
@@ -149,23 +77,27 @@ function getDemoData(schema: string): PlanJSON | MemoryJSON | SummaryJSON {
  * Supabase Database Integration
  */
 export async function saveToSupabase(table: string, data: any): Promise<boolean> {
-  if (config.mode === 'demo' || !supabase) {
-    console.log(`💾 [DEMO] Would save to Supabase table "${table}":`, data);
-    return true;
+  if (!supabase) {
+    console.warn(`⚠️ Supabase not initialized – cannot save to "${table}"`);
+    return false;
   }
   
-  // Production: Save to Supabase
   try {
     const { error } = await supabase.from(table).insert(data);
     if (error) {
+      // Handle missing table gracefully (PGRST205 = table not found)
+      if (error.code === 'PGRST205') {
+        console.warn(`⚠️ Table "${table}" does not exist in database. Skipping save.`);
+        return false;
+      }
       console.error(`Supabase insert error on table "${table}":`, error);
       return false;
     }
 
-    console.log(`💾 [PROD] Saved record to Supabase table "${table}"`);
+    console.log(`💾 Saved record to Supabase table "${table}"`);
     return true;
   } catch (error) {
-    console.error('Supabase error:', error);
+    console.error(`Supabase error saving to "${table}":`, error);
     return false;
   }
 }
@@ -180,12 +112,7 @@ export async function signUpUser(params: {
   supportedPerson?: string;
 }): Promise<{ success: boolean; userId?: string; error?: string }> {
   if (!supabase) {
-    console.log('🔐 [DEMO] Would sign up user in Supabase:', {
-      email: params.email,
-      fullName: params.fullName,
-      supportedPerson: params.supportedPerson,
-    });
-    return { success: true, userId: 'demo-user' };
+    throw new Error('Supabase client not initialized – cannot sign up user.');
   }
 
   try {
@@ -206,22 +133,23 @@ export async function signUpUser(params: {
     }
 
     const userId = data.user?.id;
-
-    // Optionally create a preferences row for this user
-    if (userId) {
-      await saveToSupabase('user_preferences', {
-        user_id: userId,
-        preferred_pace: 'slow',
-        favorite_time: 'morning',
-        interests: [],
-        routine_notes: null,
-      });
+    if (!userId) {
+      return { success: false, error: 'User created but no user ID returned.' };
     }
+
+    // Create a preferences row for this user
+    await saveToSupabase('user_preferences', {
+      user_id: userId,
+      preferred_pace: 'slow',
+      favorite_time: 'morning',
+      interests: [],
+      routine_notes: null,
+    });
 
     return { success: true, userId };
   } catch (error: any) {
     console.error('Unexpected signUp error:', error);
-    return { success: false, error: 'Unable to sign up right now.' };
+    return { success: false, error: error.message || 'Unable to sign up right now.' };
   }
 }
 
@@ -233,8 +161,7 @@ export async function signInUser(params: {
   password: string;
 }): Promise<{ success: boolean; userId?: string; error?: string }> {
   if (!supabase) {
-    console.log('🔐 [DEMO] Would sign in user in Supabase:', { email: params.email });
-    return { success: true, userId: 'demo-user' };
+    throw new Error('Supabase client not initialized – cannot sign in user.');
   }
 
   try {
@@ -249,10 +176,14 @@ export async function signInUser(params: {
     }
 
     const userId = data.user?.id;
+    if (!userId) {
+      return { success: false, error: 'Login successful but no user ID returned.' };
+    }
+
     return { success: true, userId };
   } catch (error: any) {
     console.error('Unexpected signIn error:', error);
-    return { success: false, error: 'Unable to log in right now.' };
+    return { success: false, error: error.message || 'Unable to log in right now.' };
   }
 }
 
@@ -263,25 +194,26 @@ export async function triggerN8NWorkflow(
   event: string,
   payload: any
 ): Promise<boolean> {
-  if (config.mode === 'demo') {
-    console.log(`🔔 [DEMO] Would trigger n8n workflow "${event}":`, payload);
-    return true;
+  if (!config.keys.n8nWebhook) {
+    throw new Error('N8N webhook URL not configured – cannot trigger workflow.');
   }
   
-  // Production: Trigger n8n webhook
   try {
-    // Placeholder for actual n8n integration
-    // const response = await fetch(config.keys.n8nWebhook!, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ event, ...payload })
-    // });
+    const response = await fetch(config.keys.n8nWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, ...payload }),
+    });
     
-    console.log(`🔔 [PROD] Would trigger n8n webhook for "${event}"`);
+    if (!response.ok) {
+      throw new Error(`N8N webhook returned ${response.status}`);
+    }
+    
+    console.log(`🔔 Triggered n8n webhook for "${event}"`);
     return true;
   } catch (error) {
     console.error('n8n webhook error:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -289,16 +221,10 @@ export async function triggerN8NWorkflow(
  * Get user preferences from Supabase
  */
 export async function getUserPreferences(userId: string): Promise<any> {
-  if (config.mode === 'demo' || !supabase) {
-    return {
-      preferredPace: 'slow',
-      favoriteTime: 'morning',
-      interests: ['gardening', 'music'],
-      routineNotes: 'Prefers gentle reminders, mornings are slow',
-    };
+  if (!supabase) {
+    throw new Error('Supabase client not initialized – cannot fetch user preferences.');
   }
   
-  // Production: Fetch from Supabase
   try {
     const { data, error } = await supabase
       .from('user_preferences')
@@ -308,12 +234,146 @@ export async function getUserPreferences(userId: string): Promise<any> {
     
     if (error) {
       console.error('Failed to fetch user preferences from Supabase:', error);
-      return {};
+      throw new Error(`Failed to fetch preferences: ${error.message}`);
     }
 
     return data || {};
   } catch (error) {
     console.error('Failed to fetch user preferences:', error);
-    return {};
+    throw error;
+  }
+}
+
+/**
+ * Get recent chat history for a user from Supabase
+ */
+export async function getChatHistory(userId: string, limit: number = 50): Promise<any[]> {
+  if (!supabase) {
+    console.warn('⚠️ Supabase not initialized – returning empty chat history');
+    return [];
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', userId)
+      .order('timestamp', { ascending: true })
+      .limit(limit);
+
+    if (error) {
+      // Handle missing table gracefully (PGRST205 = table not found)
+      if (error.code === 'PGRST205') {
+        console.warn('⚠️ Table "chat_messages" does not exist in database. Returning empty history.');
+        return [];
+      }
+      console.error('Failed to fetch chat history from Supabase:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch chat history:', error);
+    return [];
+  }
+}
+
+/**
+ * Generate AI-powered chat reply using Gemini
+ * Supports conversation history for context-aware responses
+ */
+export async function generateChatReply(
+  userInput: string,
+  history: { role: 'user' | 'amily'; text: string }[] = [],
+  isFirstTurn: boolean = false
+): Promise<string> {
+  if (!config.keys.gemini) {
+    throw new Error('Gemini API key is required for chat generation.');
+  }
+
+  const systemInstruction =
+    'You are Amily, a gentle, patient companion for elderly users. ' +
+    'You speak slowly, in short, simple sentences. ' +
+    'You avoid technical language. ' +
+    'You respond with warmth, reassurance, and clear, kind suggestions. ' +
+    (isFirstTurn
+      ? 'This is the first conversation today. Gently check if they have taken their pills, eaten, and had some water, then respond warmly.'
+      : '');
+
+  try {
+    const preparedHistory = history
+      .filter((message) => Boolean(message?.text?.trim()))
+      .map((message) => ({
+        role: message.role === 'user' ? 'user' : 'model',
+        parts: [{ text: message.text }],
+      }));
+
+    const useSystemInstruction =
+      /gemini-2/i.test(GEMINI_CHAT_MODEL) || GEMINI_CHAT_MODEL.includes('flash');
+
+    const contents: any[] = [...preparedHistory];
+
+    if (!useSystemInstruction) {
+      contents.unshift({
+        role: 'system',
+        parts: [{ text: systemInstruction }],
+      });
+    }
+
+    contents.push({
+      role: 'user',
+      parts: [{ text: userInput }],
+    });
+
+    const requestBody: any = {
+      contents,
+      generationConfig: {
+        temperature: 0.6,
+        maxOutputTokens: 220,
+        topP: 0.9,
+      },
+    };
+
+    if (useSystemInstruction) {
+      requestBody.systemInstruction = {
+        role: 'system',
+        parts: [{ text: systemInstruction }],
+      };
+    }
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_CHAT_MODEL}:generateContent`;
+
+    const response = await fetch(`${endpoint}?key=${config.keys.gemini}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+    }
+
+    const json: any = await response.json();
+    const candidateText =
+      json.candidates
+        ?.map((candidate: any) =>
+          candidate.content?.parts
+            ?.map((part: any) => part?.text ?? '')
+            .join('')
+            .trim()
+        )
+        .find((text: string) => Boolean(text)) ?? '';
+
+    if (!candidateText) {
+      throw new Error('Empty response from Gemini');
+    }
+
+    return candidateText;
+  } catch (error) {
+    console.error('AI chat generation error:', error);
+    throw error;
   }
 }

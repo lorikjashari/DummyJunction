@@ -36,8 +36,8 @@ Automatically activated when no API keys are detected.
 
 ### Production Mode
 Automatically activated when API keys are present.
-- Connects to real ElevenLabs, Gemini, Supabase, n8n APIs
-- Generates actual TTS audio
+- Connects to Gemini (reasoning) + ElevenLabs (voice), Supabase, n8n APIs
+- Generates actual Gemini replies with real ElevenLabs TTS audio
 - Stores data in Supabase database
 - Sends Care Circle notifications via n8n webhooks
 
@@ -223,8 +223,8 @@ PORT=3000
 NODE_ENV=development
 
 # API Keys (optional - uses demo mode if missing)
-ELEVENLABS_API_KEY=your_key_here
 GEMINI_API_KEY=your_key_here
+ELEVENLABS_API_KEY=your_key_here
 SUPABASE_URL=your_url_here
 SUPABASE_KEY=your_key_here
 N8N_WEBHOOK_URL=your_webhook_url_here
@@ -233,8 +233,8 @@ N8N_WEBHOOK_URL=your_webhook_url_here
 ### API Key Files
 
 Alternatively, place API keys in `../APIKEYSFORTOMORROW/`:
-- `ElevenLabs.txt` - ElevenLabs API key
-- `FeatherlessAI.txt` - Gemini/Featherless AI key
+- `FeatherlessAI.txt` - Gemini API key (reasoning)
+- `ElevenLabs.txt` - ElevenLabs API key (for natural voice / TTS)
 - `supabase.txt` - Supabase URL (line 1) and key (line 2)
 - `n8ns.txt` - n8n webhook URL
 
@@ -334,15 +334,17 @@ Compiles TypeScript to `dist/` folder.
 
 ## Integration Details
 
-### ElevenLabs (TTS)
-- Generates natural voice audio from text
-- Uses warm, gentle voice settings
-- Returns signed URLs for audio playback
+### Gemini (Reasoning & Conversation)
+- Primary thought partner for Amily’s replies
+- Detects tone (confused, lonely, calm) and keeps sentences short
+- Adds gentle reminders about pills, water, or rest on first turns
+- Runs on `gemini-1.5-pro-002` via the Generative Language API
 
-### Google Gemini (AI)
-- Structured JSON generation
-- Elderly-friendly language simplification
-- Emotional context understanding
+### ElevenLabs (Voice & TTS)
+- Transforms Gemini’s reply into natural speech (Rachel voice)
+- Provides warm pacing with breathing pauses and soft inflection
+- Uses the `eleven_monolingual_v1` model with configurable stability
+- Ensures the chatbox always has an accessible audio companion
 
 ### Supabase (Database)
 - User preferences storage

@@ -20,12 +20,15 @@ import {
 } from './persona';
 import {
   generateTTS,
-  generateWithGemini,
   saveToSupabase,
   triggerN8NWorkflow,
   getUserPreferences,
   signUpUser,
   signInUser,
+  getChatHistory,
+  generateChatReply,
+  GEMINI_CHAT_MODEL,
+  ELEVENLABS_TTS_MODEL,
 } from './services';
 import {
   detectSafetyConcerns,
@@ -77,20 +80,24 @@ app.post('/api/checkin', async (req: Request, res: Response) => {
     // Detect emotion if user provided input
     const detectedEmotion = userInput ? detectEmotion(userInput) : 'calm';
     
-    // Generate PlanJSON using Gemini (or demo data)
-    const planData = await generateWithGemini<PlanJSON>(
-      `Generate a gentle daily plan for an elderly user who seems ${detectedEmotion}`,
-      'plan'
-    );
+    // Map emotion to mood for plan
+    const planMood: 'low' | 'ok' | 'good' = 
+      detectedEmotion === 'stressed' || detectedEmotion === 'lonely' ? 'low' :
+      detectedEmotion === 'confused' ? 'ok' : 'good';
     
-    // Validate against schema
-    const validatedPlan = PlanJSONSchema.parse(planData);
+    // Generate simple plan based on emotion (no AI model)
+    const validatedPlan: PlanJSON = {
+      summary: "Let's take the day slowly… a little movement, some rest, and maybe a chat.",
+      next_step: "How about a short walk after breakfast?",
+      mood: planMood,
+      tags: ['routine', 'mobility'],
+    };
     
     // Generate warm TTS text
     const checkInMsg = generateCheckInMessage(validatedPlan.mood);
     const ttsText = `${checkInMsg} ${validatedPlan.summary}`;
     
-    // Generate audio URL
+    // Generate audio URL using ElevenLabs
     const audioUrl = await generateTTS(ttsText);
     
     // Save to database
@@ -111,7 +118,6 @@ app.post('/api/checkin', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       data: validatedPlan,
       ttsText,
       audioUrl,
@@ -201,8 +207,38 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/chatbox/history/:userId
+ * Return recent chat messages for a user
+ */
+app.get('/api/chatbox/history/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const history = await getChatHistory(userId, 50);
+
+    const messages = history.map((row: any) => ({
+      type: row.role === 'user' ? 'user' : 'amily',
+      text: row.text,
+      emotion: row.emotion || null,
+      timestamp: row.timestamp,
+    }));
+
+    res.json({
+      success: true,
+      data: messages,
+    });
+  } catch (error) {
+    // If history fetch fails (e.g., table doesn't exist), return empty array
+    console.warn('ChatBox history error (returning empty):', error);
+    res.json({
+      success: true,
+      data: [],
+    });
+  }
+});
+
+/**
  * POST /api/chatbox
- * Unified chat endpoint for reminders, emotion detection, suggestions & lightweight memory
+ * Chat endpoint using AI-powered responses (ElevenLabs) + ElevenLabs TTS
  */
 app.post('/api/chatbox', async (req: Request, res: Response) => {
   try {
@@ -219,63 +255,51 @@ app.post('/api/chatbox', async (req: Request, res: Response) => {
     const memory = chatMemory.get(trimmedUserId) || {};
     const firstTurn = !memory.reminderAsked;
 
-    // Emotion detection (text-based proxy for voice emotion)
-    const emotion = detectEmotion(input);
-    memory.lastEmotion = emotion;
     memory.reminderAsked = true;
     chatMemory.set(trimmedUserId, memory);
 
-    // Build reminder question on first turn
-    const reminderQuestion = firstTurn
-      ? "Before we talk more… may I gently check: have you taken your pills, had something to eat, and had some water today?"
-      : '';
+    // Load recent chat history for AI context
+    const historyRows = await getChatHistory(trimmedUserId, 20);
+    const historyForAI =
+      historyRows?.map((row: any) => ({
+        role: row.role === 'user' ? ('user' as const) : ('amily' as const),
+        text: row.text as string,
+      })) ?? [];
 
-    // Suggestions based on emotion
-    const suggestions: string[] = [];
-    if (emotion === 'lonely') {
-      suggestions.push(
-        'We could save a special story together in MemoryLane.',
-        'We might send a little voice message to a buddy so you feel less alone.'
-      );
-    } else if (emotion === 'stressed') {
-      suggestions.push(
-        'We can try a very short breathing moment together.',
-        'If you feel up to it, a tiny walk or stretch could help your body relax.'
-      );
-    } else if (emotion === 'confused') {
-      suggestions.push(
-        'We can keep today simple and walk through things one by one.',
-        'If you like, we could record a note in MemoryLane so you do not have to remember everything yourself.'
-      );
-    } else {
-      suggestions.push(
-        'Maybe we could check in together about how your day is going.',
-        'If you wish, we could reach out to a buddy or look at a happy memory.'
-      );
-    }
-
-    const suggestionText = suggestions.join(' ');
-
-    // Core empathetic response
-    const baseResponse = generateEmpatheticResponse(emotion);
-
-    let fullResponse = baseResponse;
-    if (firstTurn) {
-      fullResponse += ' ' + reminderQuestion;
-    }
-    fullResponse += ' ' + suggestionText;
-
-    const ttsText = formatForTTS(fullResponse, { includeReassurance: true });
+    // Generate AI-powered reply with conversation context
+    const replyText = await generateChatReply(input, historyForAI, firstTurn);
+    const ttsText = formatForTTS(replyText, { includeReassurance: false });
+    
+    // Generate audio using ElevenLabs TTS
     const audioUrl = await generateTTS(ttsText);
+
+    // Persist both user and Amily messages to Supabase (non-blocking, fails gracefully)
+    saveToSupabase('chat_messages', {
+      user_id: trimmedUserId,
+      role: 'user',
+      text: input,
+      emotion: null,
+      timestamp: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn('Failed to save user message (non-critical):', err);
+    });
+
+    saveToSupabase('chat_messages', {
+      user_id: trimmedUserId,
+      role: 'amily',
+      text: ttsText,
+      emotion: null,
+      timestamp: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn('Failed to save Amily message (non-critical):', err);
+    });
 
     res.json({
       success: true,
-      mode: config.mode,
       data: {
-        emotion,
         firstTurn,
-        reminderQuestion: firstTurn ? reminderQuestion : null,
-        suggestions,
+        reasoningModel: GEMINI_CHAT_MODEL,
+        voiceModel: ELEVENLABS_TTS_MODEL,
       },
       ttsText,
       audioUrl,
@@ -305,20 +329,22 @@ app.post('/api/memory', async (req: Request, res: Response) => {
       });
     }
     
-    // Generate MemoryJSON using Gemini
-    const memoryData = await generateWithGemini<MemoryJSON>(
-      `Extract a structured memory from this story: "${storyInput}"`,
-      'memory'
-    );
+    // Extract simple memory structure from story (no AI model)
+    const sentences = storyInput.split(/[.!?]+/).filter((s: string) => s.trim().length > 0).slice(0, 3);
+    const story3Sentences = sentences.join('. ') + (sentences.length > 0 ? '.' : '');
     
-    // Validate against schema
-    const validatedMemory = MemoryJSONSchema.parse(memoryData);
+    const validatedMemory: MemoryJSON = {
+      title: storyInput.substring(0, 50).trim() || "A Special Memory",
+      era: "Recent years",
+      story_3_sentences: story3Sentences || storyInput.substring(0, 200),
+      tags: ['personal'],
+    };
     
     // Generate encouraging TTS response
     const prompt = generateMemoryPrompt();
     const ttsText = formatForTTS(`${prompt} I've saved your story about "${validatedMemory.title}".`);
     
-    // Generate audio
+    // Generate audio using ElevenLabs
     const audioUrl = await generateTTS(ttsText);
     
     // Save memory to database
@@ -330,7 +356,6 @@ app.post('/api/memory', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       data: validatedMemory,
       ttsText,
       audioUrl,
@@ -353,20 +378,18 @@ app.post('/api/buddy', async (req: Request, res: Response) => {
   try {
     const { userId, messageFrom, messageText } = req.body;
     
-    // Generate SummaryJSON using Gemini
-    const summaryData = await generateWithGemini<SummaryJSON>(
-      `Summarize this message warmly: "${messageText}"`,
-      'summary'
-    );
-    
-    // Validate against schema
-    const validatedSummary = SummaryJSONSchema.parse(summaryData);
+    // Generate simple summary (no AI model)
+    const validatedSummary: SummaryJSON = {
+      summary: `Your friend ${messageFrom || 'someone'} sent a warm hello… they're thinking of you today.`,
+      tone: 'warm' as const,
+      suggestion: "Maybe send a little message back when you're ready?",
+    };
     
     // Generate social encouragement
     const encouragement = generateSocialEncouragement();
     const ttsText = formatForTTS(`${validatedSummary.summary} ${encouragement}`);
     
-    // Generate audio
+    // Generate audio using ElevenLabs
     const audioUrl = await generateTTS(ttsText);
     
     // Save interaction
@@ -379,7 +402,6 @@ app.post('/api/buddy', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       data: validatedSummary,
       ttsText,
       audioUrl,
@@ -401,7 +423,6 @@ app.get('/api', (_req: Request, res: Response) => {
   res.json({
     service: 'Amily Companion',
     version: '1.0.0',
-    mode: config.mode,
     message: "Hello... I'm Amily. I'm here to help you feel calm, safe, and understood.",
     endpoints: {
       health: 'GET /api/health',
@@ -422,7 +443,6 @@ app.get('/api', (_req: Request, res: Response) => {
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
-    mode: config.mode,
     service: 'Amily Companion',
     timestamp: new Date().toISOString(),
   });
@@ -475,7 +495,6 @@ app.post('/api/empathy', async (req: Request, res: Response) => {
       
       return res.json({
         success: true,
-        mode: config.mode,
         emergency: true,
         alert: safetyAlert,
         alertId: emergencyResult.alertId,
@@ -495,7 +514,6 @@ app.post('/api/empathy', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       emergency: false,
       alert: safetyAlert.level === 'concern' ? safetyAlert : null,
       data: {
@@ -532,7 +550,6 @@ app.post('/api/safety/vitals', async (req: Request, res: Response) => {
       
       return res.json({
         success: true,
-        mode: config.mode,
         alert: safetyAlert,
         alertId: emergencyResult.alertId,
         ttsText: reassurance,
@@ -543,7 +560,6 @@ app.post('/api/safety/vitals', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       alert: safetyAlert,
       message: 'Vitals within normal range',
       timestamp: new Date().toISOString(),
@@ -584,7 +600,6 @@ app.post('/api/safety/emergency', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       alert: safetyAlert,
       alertId: emergencyResult.alertId,
       ttsText: reassurance,
@@ -602,32 +617,36 @@ app.post('/api/safety/emergency', async (req: Request, res: Response) => {
 
 /**
  * GET /api/wellness/nudges
- * Get current wellness nudges and reminders
+ * Get current wellness nudges and reminders (reads from database)
  */
 app.get('/api/wellness/nudges', async (req: Request, res: Response) => {
   try {
     const { userId, timeOfDay = 'morning', mood = 'ok' } = req.query;
     
-    // Demo data
-    const medications: MedicationSchedule[] = [
-      {
-        id: '1',
-        name: 'Morning Vitamins',
-        dosage: 'one tablet',
-        times: ['08:00'],
-        withFood: true,
-      },
-    ];
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID is required.',
+      });
+    }
+
+    // Read medications from database (requires wellness_medications table)
+    // TODO: Implement proper medication fetching from Supabase
+    const medications: MedicationSchedule[] = [];
     
+    // Read hydration from database (requires wellness_hydration table)
+    // TODO: Implement proper hydration fetching from Supabase
     const hydration: HydrationGoal = {
-      dailyGlasses: 8,
-      currentGlasses: 3,
+      dailyGlasses: 0,
+      currentGlasses: 0,
     };
     
+    // Read weather from external API or database
+    // TODO: Implement weather API integration
     const weather: WeatherData = {
-      temp: 72,
-      condition: 'sunny',
-      humidity: 45,
+      temp: 0,
+      condition: 'unknown',
+      humidity: 0,
     };
     
     const nudges = getWellnessNudges(
@@ -640,7 +659,6 @@ app.get('/api/wellness/nudges', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       data: nudges,
       timestamp: new Date().toISOString(),
     });
@@ -681,7 +699,6 @@ app.post('/api/wellness/log', async (req: Request, res: Response) => {
     
     res.json({
       success: true,
-      mode: config.mode,
       ttsText: response,
       audioUrl,
       timestamp: new Date().toISOString(),
@@ -699,7 +716,6 @@ app.post('/api/wellness/log', async (req: Request, res: Response) => {
 const PORT = config.port;
 app.listen(PORT, () => {
   console.log(`\n🌸 Amily Companion Server Running`);
-  console.log(`   Mode: ${config.mode.toUpperCase()}`);
   console.log(`   Port: ${PORT}`);
   console.log(`   URL: http://localhost:${PORT}`);
   console.log(`\n   Endpoints:`);

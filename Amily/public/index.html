@@ -1316,7 +1316,11 @@
             const [isListening, setIsListening] = useState(false);
             const [isLoading, setIsLoading] = useState(false);
             const [error, setError] = useState(null);
+            const [textInput, setTextInput] = useState('');
+            const [pipelineStage, setPipelineStage] = useState('idle');
+            const [lastResponseMeta, setLastResponseMeta] = useState(null);
             const recognitionRef = useRef(null);
+            const userId = 'voice-user';
 
             useEffect(() => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1333,14 +1337,17 @@
                 recognition.onstart = () => {
                     setIsListening(true);
                     setError(null);
+                    setPipelineStage('listening');
                 };
                 recognition.onerror = (event) => {
                     console.error('Speech recognition error:', event);
                     setIsListening(false);
+                    setPipelineStage('idle');
                     setError('I had trouble hearing you. Please try again.');
                 };
                 recognition.onend = () => {
                     setIsListening(false);
+                    setPipelineStage((stage) => (stage === 'listening' ? 'idle' : stage));
                 };
                 recognition.onresult = (event) => {
                     const transcript = event.results[0][0].transcript;
@@ -1354,18 +1361,22 @@
                 };
             }, []);
 
-            const handleSend = async (text) => {
-                if (!text || !text.trim()) return;
+            const handleSend = async (rawText) => {
+                const text = rawText?.trim();
+                if (!text) return;
 
                 setMessages((prev) => [...prev, { type: 'user', text }]);
                 setIsLoading(true);
+                setError(null);
+                setPipelineStage('thinking');
+                setLastResponseMeta(null);
 
                 try {
                     const res = await fetch('/api/chatbox', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            userId: 'voice-user',
+                            userId,
                             input: text,
                         }),
                     });
@@ -1373,27 +1384,63 @@
 
                     if (!res.ok || !data.success) {
                         setError(data.error || 'Something went wrong while talking to Amily.');
+                        setPipelineStage('idle');
                     } else {
                         const aiText = data.ttsText || data.data?.response || 'I am here with you.';
-                        setMessages((prev) => [...prev, { type: 'amily', text: aiText, emotion: data.data?.emotion }]);
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                type: 'amily',
+                                text: aiText,
+                                emotion: data.data?.emotion,
+                                meta: {
+                                    reasoningModel: data.data?.reasoningModel || 'Gemini 1.5 Pro',
+                                    voiceModel: data.data?.voiceModel || 'ElevenLabs',
+                                },
+                            },
+                        ]);
+
+                        setLastResponseMeta({
+                            firstTurn: data.data?.firstTurn,
+                            reasoningModel: data.data?.reasoningModel,
+                            voiceModel: data.data?.voiceModel,
+                        });
 
                         if (data.audioUrl) {
                             try {
+                                setPipelineStage('speaking');
                                 const audio = new Audio(data.audioUrl);
+                                audio.onended = () => setPipelineStage('idle');
+                                audio.onerror = () => setPipelineStage('idle');
                                 audio.play().catch((err) => {
                                     console.warn('Could not play audio:', err);
+                                    setPipelineStage('idle');
                                 });
                             } catch (err) {
                                 console.warn('Audio element error:', err);
+                                setPipelineStage('idle');
                             }
+                        } else {
+                            setPipelineStage('idle');
                         }
                     }
                 } catch (err) {
                     console.error('ChatBox request error:', err);
                     setError('Network error while talking to Amily.');
+                    setPipelineStage('idle');
                 } finally {
                     setIsLoading(false);
+                    setPipelineStage((stage) => (stage === 'speaking' ? stage : 'idle'));
                 }
+            };
+
+            const handleTextSubmit = (event) => {
+                event.preventDefault();
+                if (isLoading) return;
+                const text = textInput.trim();
+                if (!text) return;
+                handleSend(text);
+                setTextInput('');
             };
 
             const startListening = () => {
@@ -1404,6 +1451,49 @@
                 setError(null);
                 recognitionRef.current.start();
             };
+
+            // Load previous chat history for this user when the page mounts
+            useEffect(() => {
+                (async () => {
+                    try {
+                        const res = await fetch(`/api/chatbox/history/${encodeURIComponent(userId)}`);
+                        const data = await res.json();
+                        if (res.ok && data.success && Array.isArray(data.data)) {
+                            setMessages(
+                                data.data.map((m) => ({
+                                    type: m.type === 'user' ? 'user' : 'amily',
+                                    text: m.text,
+                                    emotion: m.emotion,
+                                    timestamp: m.timestamp,
+                                }))
+                            );
+                        }
+                    } catch (err) {
+                        console.error('Failed to load chat history:', err);
+                    }
+                })();
+            }, []);
+
+            const pipelineSteps = [
+                {
+                    id: 'listening',
+                    title: 'Listening',
+                    subtitle: 'Microphone capture',
+                    description: 'Your voice is transcribed in gentle real time.',
+                },
+                {
+                    id: 'thinking',
+                    title: 'Gemini reasoning',
+                    subtitle: 'Gemini 1.5 Pro 002',
+                    description: 'Gemini understands tone and drafts a caring reply.',
+                },
+                {
+                    id: 'speaking',
+                    title: 'ElevenLabs voice',
+                    subtitle: 'Rachel · eleven_monolingual_v1',
+                    description: 'ElevenLabs speaks Amily’s words softly back to you.',
+                },
+            ];
 
             return (
                 <section id="chatbox" className="relative py-20">
@@ -1417,10 +1507,35 @@
                                 <h2 className={`font-display text-3xl sm:text-4xl font-bold ${
                                     darkMode ? 'text-slate-50' : 'text-slate-900'
                                 }`}>
-                                    Talk to Amily with your voice.
+                                    Gemini thinks. ElevenLabs speaks.
                                 </h2>
                                 <p className={darkMode ? 'text-slate-400 text-sm sm:text-base' : 'text-slate-600 text-sm sm:text-base'}>
-                                    Press the microphone, share how you feel, and Amily will listen, respond, and speak back to you.
+                                    Tell Amily how you feel. Gemini 1.5 Pro 002 composes the response, then ElevenLabs reads it back in a warm, steady voice.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2 mb-10">
+                            <div
+                                className={`rounded-3xl p-5 border shadow-lg text-sm ${
+                                    darkMode ? 'bg-slate-950/70 border-slate-800 text-slate-200' : 'bg-white/90 border-rose-100 text-slate-700'
+                                }`}
+                            >
+                                <div className="text-[11px] uppercase tracking-[0.24em] font-semibold opacity-70 mb-1">Reasoning</div>
+                                <div className="text-xl font-semibold mb-1">Gemini 1.5 Pro 002</div>
+                                <p className="text-sm opacity-80">
+                                    Understands mood, context, and routines. Keeps responses slow, short, and reassuring.
+                                </p>
+                            </div>
+                            <div
+                                className={`rounded-3xl p-5 border shadow-lg text-sm ${
+                                    darkMode ? 'bg-slate-950/70 border-rose-500/40 text-slate-200' : 'bg-gradient-to-br from-rose-50 via-white to-rose-100 border-rose-200 text-slate-700'
+                                }`}
+                            >
+                                <div className="text-[11px] uppercase tracking-[0.24em] font-semibold opacity-70 mb-1">Voice</div>
+                                <div className="text-xl font-semibold mb-1">ElevenLabs · Rachel</div>
+                                <p className="text-sm opacity-80">
+                                    Plays Amily’s words back with gentle pacing, soft breaths, and clear articulation.
                                 </p>
                             </div>
                         </div>
@@ -1430,12 +1545,11 @@
                                 darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-rose-100'
                             }`}
                         >
-                            <div className="p-6 sm:p-8 grid gap-8 lg:grid-cols-[minmax(0,0.9fr),minmax(0,1.1fr)]">
-                                <div className="space-y-6 flex flex-col justify-between">
-                                    <div className="space-y-4">
+                            <div className="p-6 sm:p-8 grid gap-8 lg:grid-cols-[minmax(0,0.95fr),minmax(0,1.05fr)]">
+                                <div className="space-y-7 flex flex-col justify-between">
+                                    <div className="space-y-5">
                                         <p className={darkMode ? 'text-slate-300 text-sm' : 'text-slate-700 text-sm'}>
-                                            When you speak, Amily will gently check on things like medication, food, and water,
-                                            listen for how you feel, and suggest kind next steps.
+                                            Share feelings or questions. Gemini watches for medication, hydration, loneliness, and confusion cues before gently answering.
                                         </p>
                                         <button
                                             type="button"
@@ -1456,6 +1570,59 @@
                                             </span>
                                             <span>{isListening ? 'Listening… speak gently to Amily' : 'Press to talk to Amily'}</span>
                                         </button>
+                                        <form onSubmit={handleTextSubmit} className="space-y-3">
+                                            <label className={`text-[11px] uppercase tracking-[0.28em] font-semibold ${
+                                                darkMode ? 'text-slate-400' : 'text-slate-500'
+                                            }`}>
+                                                Or type a gentle message
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                value={textInput}
+                                                onChange={(e) => setTextInput(e.target.value)}
+                                                placeholder="“I feel a little lonely this afternoon...”"
+                                                className={`w-full rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/60 ${
+                                                    darkMode
+                                                        ? 'bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500'
+                                                        : 'bg-white border border-rose-100 text-slate-800 placeholder-slate-400'
+                                                }`}
+                                            />
+                                            <div className="flex items-center justify-between gap-3">
+                                                <button
+                                                    type="submit"
+                                                    disabled={isLoading}
+                                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-500 to-red-500 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+                                                >
+                                                    <SendIcon />
+                                                    Send softly
+                                                </button>
+                                                <span className="text-[11px] text-slate-400">
+                                                    Responses stay gentle, private, and stored in Supabase.
+                                                </span>
+                                            </div>
+                                        </form>
+                                        <div className="grid gap-3 sm:grid-cols-3">
+                                            {pipelineSteps.map((step) => {
+                                                const isActive = pipelineStage === step.id;
+                                                return (
+                                                    <div
+                                                        key={step.id}
+                                                        className={`rounded-2xl border px-3 py-3 text-xs space-y-1 ${
+                                                            isActive
+                                                                ? 'bg-gradient-to-br from-rose-500 to-red-500 text-white border-transparent shadow-lg'
+                                                                : darkMode
+                                                                ? 'bg-slate-950/60 border-slate-800 text-slate-300'
+                                                                : 'bg-white border-slate-100 text-slate-600'
+                                                        }`}
+                                                    >
+                                                        <div className="font-semibold text-[11px] uppercase tracking-[0.18em]">{step.title}</div>
+                                                        <div className="text-[11px] opacity-80">{step.subtitle}</div>
+                                                        <p className="text-[11px] leading-relaxed opacity-80">{step.description}</p>
+                                                        {isActive && <div className="text-[10px] font-semibold tracking-[0.2em]">ACTIVE</div>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                         {error && (
                                             <div className="text-xs px-3 py-2 rounded-2xl bg-red-900/40 border border-red-500/60 text-red-100">
                                                 {error}
@@ -1466,21 +1633,29 @@
                                                 Amily is thinking about what to say back…
                                             </div>
                                         )}
+                                        {lastResponseMeta && (
+                                            <div className={`text-[11px] rounded-2xl px-3 py-2 border ${
+                                                darkMode ? 'border-slate-800 text-slate-300' : 'border-rose-100 text-slate-600'
+                                            }`}>
+                                                <div>Reasoning: {lastResponseMeta.reasoningModel || 'Gemini 1.5 Pro 002'}</div>
+                                                <div>Voice: {lastResponseMeta.voiceModel || 'ElevenLabs Rachel'}</div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="text-[11px] text-slate-500">
-                                        Voice input works best in a quiet room, speaking slowly and clearly.
+                                        Voice input works best in a quiet room, speaking slowly and clearly. Text input is always available if microphones are tricky.
                                     </div>
                                 </div>
 
                                 <div
-                                    className={`rounded-2xl p-5 max-h-80 overflow-y-auto space-y-4 text-sm bg-gradient-to-b ${
+                                    className={`rounded-2xl p-5 max-h-96 overflow-y-auto space-y-4 text-sm bg-gradient-to-b ${
                                         darkMode ? 'from-slate-950/90 via-slate-900/75 to-slate-900/60 border border-slate-800' : 'from-rose-50 via-white to-rose-50/80 border border-rose-100'
                                     }`}
                                 >
                                     {messages.length === 0 ? (
                                         <div className="text-center py-10">
                                             <p className={darkMode ? 'text-slate-400 text-sm' : 'text-slate-500 text-sm'}>
-                                                Press the microphone and tell Amily how you are feeling today.
+                                                Press the microphone or type a message to let Gemini & ElevenLabs take care of you.
                                             </p>
                                         </div>
                                     ) : (
@@ -1509,6 +1684,11 @@
                                                         )}
                                                     </div>
                                                     <div className="leading-relaxed whitespace-pre-line">{msg.text}</div>
+                                                    {msg.type === 'amily' && (
+                                                        <div className="text-[10px] uppercase tracking-[0.2em] mt-2 opacity-80">
+                                                            {msg.meta?.reasoningModel || 'Gemini'} · {msg.meta?.voiceModel ? `Voice ${msg.meta.voiceModel}` : 'ElevenLabs voice'}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))

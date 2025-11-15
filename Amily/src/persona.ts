@@ -174,14 +174,33 @@ export function detectEmotion(userInput: string): 'stressed' | 'confused' | 'lon
 
 /**
  * Generate empathetic response based on detected emotion
+ * (with multiple options per emotion so replies don't feel identical)
  */
 export function generateEmpatheticResponse(emotion: 'stressed' | 'confused' | 'lonely' | 'calm'): string {
-  const responses = {
-    stressed: "It's okay to feel this way… let's breathe together and go slowly.",
-    confused: "That's alright… let's look at this step by step, nice and easy.",
-    lonely: "I'm here with you… you're not alone. Let's talk for a while.",
-    calm: "I'm glad you're here… let's enjoy this moment together.",
+  const responseOptions: Record<typeof emotion, string[]> = {
+    stressed: [
+      "It's okay to feel this way… let's breathe together and go slowly.",
+      "This sounds heavy… we can take things one small step at a time.",
+      "Thank you for telling me… we will go gently, there is no rush.",
+    ],
+    confused: [
+      "That's alright… let's look at this step by step, nice and easy.",
+      "It can be confusing sometimes… we will go through it slowly together.",
+      "You do not have to understand everything at once… we can take our time.",
+    ],
+    lonely: [
+      "I'm here with you… you're not alone. Let's talk for a while.",
+      "Feeling lonely can be very hard… I am right here listening to you.",
+      "Even if the room feels empty, I am here with you now.",
+    ],
+    calm: [
+      "I'm glad you're here… let's enjoy this moment together.",
+      "It sounds like a gentle moment… we can simply be here together.",
+      "Thank you for sharing this time with me… let's keep things soft and easy.",
+    ],
   };
-  
-  return formatForTTS(responses[emotion]);
+
+  const options = responseOptions[emotion];
+  const choice = options[Math.floor(Math.random() * options.length)];
+  return formatForTTS(choice);
 }

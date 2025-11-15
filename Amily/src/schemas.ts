@@ -41,10 +41,9 @@ export type SummaryJSON = z.infer<typeof SummaryJSONSchema>;
  */
 export const ResponseSchema = z.object({
   success: z.boolean(),
-  mode: z.enum(['demo', 'prod']),
   data: z.union([PlanJSONSchema, MemoryJSONSchema, SummaryJSONSchema, z.any()]),
   ttsText: z.string().optional().describe('Text formatted for ElevenLabs TTS'),
-  audioUrl: z.string().optional().describe('Audio URL (demo:// or signed URL)'),
+  audioUrl: z.string().optional().describe('Audio URL (base64 data URL)'),
   timestamp: z.string(),
 });
 

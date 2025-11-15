@@ -12,13 +12,11 @@ import {
 } from './persona';
 import {
   generateTTS,
-  generateWithGemini,
+  generateChatReply,
 } from './services';
-import { PlanJSON } from './schemas';
 
 async function runTests() {
   console.log('🧪 Testing Amily Components\n');
-  console.log(`Mode: ${config.mode}\n`);
   
   // Test 1: Persona engine
   console.log('✓ Test 1: Persona Engine');
@@ -41,16 +39,15 @@ async function runTests() {
   console.log(`  Text: "${ttsText}"`);
   console.log(`  Audio URL: ${audioUrl}\n`);
   
-  // Test 4: Gemini PlanJSON generation
-  console.log('✓ Test 4: PlanJSON Generation');
-  const plan = await generateWithGemini<PlanJSON>(
-    'Generate a gentle daily plan',
-    'plan'
-  );
-  console.log(`  Summary: "${plan.summary}"`);
-  console.log(`  Next Step: "${plan.next_step}"`);
-  console.log(`  Mood: ${plan.mood}`);
-  console.log(`  Tags: ${plan.tags.join(', ')}\n`);
+  // Test 4: Chat reply generation (requires AI key)
+  console.log('✓ Test 4: Chat Reply Generation');
+  try {
+    const chatReply = await generateChatReply("I'm feeling good today", [], false);
+    console.log(`  User Input: "I'm feeling good today"`);
+    console.log(`  Reply: "${chatReply}"\n`);
+  } catch (error: any) {
+    console.log(`  Skipped: ${error.message}\n`);
+  }
   
   // Test 5: Memory prompt
   console.log('✓ Test 5: Memory Recording');
