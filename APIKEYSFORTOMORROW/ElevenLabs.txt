@@ -1,0 +1,45 @@
+You are implementing the ElevenLabs voice integration for the amily MVP. Generate a production-quality server-side integration module (Node.js/TypeScript preferred) that supports DEMO_MODE (no API key) and PROD mode using ELEVENLABS_API_KEY. Provide code, config, and a spec for endpoints, plus best practices and fallback behavior.
+
+Goals:
+- Implement server endpoints (on /api/v1/ai):
+  • POST /ai/stt { audio_url }  -> returns { transcript, duration_ms, lang, confidence }
+  • POST /ai/tts { text, voice?, speed?, pitch? } -> returns { audio_url (signed), duration_ms, voice_id }
+- Behavior:
+  - DEMO MODE: do not call external ElevenLabs API; instead:
+    • For STT: run a local stub that returns deterministic transcripts from filename or canned responses; return confidence 0.95.
+    • For TTS: synthesize a placeholder silent mp3 or a local TTS (use node-speaker or mock) and store it in Supabase storage (demo bucket); return a signed URL.
+  - PROD MODE: call ElevenLabs official APIs securely from server. Support streaming upload (chunked) for large audio and stream transcription if possible.
+- Security:
+  - Server-only API key usage: ELEVENLABS_API_KEY is used only on server; clients never see it.
+  - Expose rate limits per IP (e.g., 20/min) and global per-user limits. Return 429 on exceed.
+  - Upload validation: enforce audio caps (max 60s for daily check-ins, 30s for buddy messages). Reject larger uploads with 413.
+  - Sanitize inputs before passing to LLMs or storage (strip PII as per Supabase sanitize_text).
+- Storage:
+  - Save the original upload to Supabase Storage (audio/{entries|memories|messages}/...) then call STT.
+  - Save generated TTS MP3 to Supabase Storage and return signed URL.
+- Implementation details:
+  - Use streaming where possible: fetch file from audio_url and stream to ElevenLabs without full buffering in memory.
+  - Provide a retry policy: 3 tries on network failures with jitter.
+  - Add logging (structured) with request_id to trace across n8n and server.
+- API contract examples:
+  • Input: POST /ai/stt { "audio_url": "https://..." }
+    Output: { "transcript":"...", "duration_ms": 45234, "lang":"en-US", "confidence":0.96 }
+  • Input: POST /ai/tts { "text":"Hello!", "voice":"warm_female", "speed":0.95 }
+    Output: { "audio_url":"signed_url", "duration_ms":1200, "voice_id":"warm_female" }
+- Edge cases:
+  - If STT returns empty transcript, return {transcript:"", fallback:true} and store a minimal plan_json with mood='ok' and prompt user.
+  - If ElevenLabs API errors with rate-limit, return 503 with Retry-After header and log to monitoring.
+- Tests:
+  - Unit tests for demo mode (assert deterministic outputs).
+  - Integration test with Supabase storage (using a local emulator) that posts an audio file and obtains a transcript and TTS playback.
+- Deliverables:
+  1) Node.js/TypeScript module for ElevenLabs with DEMO/PROD mode switching via env var ELEVENLABS_API_KEY or ELEVENLABS_MODE=demo
+  2) Example server endpoints (using Express/Fastify) that call the module
+  3) README with env vars, how to run demo mode locally, and how to switch to PROD by adding ELEVENLABS_API_KEY
+  4) Sample cURL commands and sample responses
+  5) Rate-limiting middleware snippet and streaming example
+
+Important notes:
+- Respect the audio caps set in product intent (60s entries; 30s buddy).
+- Ensure generated audio names are deterministic and include a content-hash to avoid duplicates.
+- Use signed, short-lived URLs for returned audio (Supabase sign_url via server).

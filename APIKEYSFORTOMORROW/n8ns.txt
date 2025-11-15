@@ -1,0 +1,49 @@
+You are configuring the n8n automation layer for the "amily" voice-first companion MVP. Create a fully-documented, secure, production-grade n8n workflow package (JSON + README) and a short-run guide that runs in DEMO MODE (no external API keys). When real API keys are present (environment variables), the flows should switch to production endpoints.
+
+Goals
+- Provide two workflow sets: DEMO_WORKFLOWS and PROD_WORKFLOWS (same logic, different credentials endpoints).
+- Implement the required webhooks for:
+  • CARE_CIRCLE_STATUS webhook: accepts { user_id, status: 'GREEN'|'AMBER'|'RED', message } and then:
+    - If GREEN: store in audit log (no push).
+    - If AMBER: notify user via "elder_nudge" step (email mock in demo) then if still AMBER escalate to caregiver (SMS/email).
+    - If RED: immediate escalation: call emergency contact workflow.
+  • SHARE_SNIPPET webhook: accepts { memory_id, to_user_id, share_id } -> compose secure short-lived deep link and send via email.
+- Integrate with Supabase via REST node (use DEMO supabase endpoints or local supabase emulator in demo).
+- Integrate with ElevenLabs via HTTP Request node for TTS/STT (use DEMO playback endpoint or local stub when ELEVENLABS_API_KEY is absent).
+- Ensure idempotency and deduplication: use a Redis/temporary storage node (or the n8n built-in credentials) to store processed webhook IDs for 24h.
+- Provide retry/backoff policy on external node failures (exponential backoff, 3 retries).
+- Emit structured logs (JSON) for each incoming webhook to a "logs" Supabase table via REST.
+- Use secure headers and signature verification for incoming webhooks. In DEMO mode, verify a shared demo-token header. In PROD mode, verify HMAC-SHA256 with N8N_WEBHOOK_SECRET env var.
+- Each flow must return a 200/202 with a short JSON ack to the caller: {status:'ok', received_at: ISO8601, job_id: uuid}.
+
+Deliverables (in this n8n prompt response):
+1. n8n workflow JSON for both CARE_CIRCLE_STATUS and SHARE_SNIPPET flows with commented nodes.
+2. README with:
+   - ENV variables to provide (DEMO and PROD): N8N_WEBHOOK_SECRET, N8N_MODE=demo|prod, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ELEVENLABS_API_KEY, N8N_REDIS_URL
+   - Import instructions and how to toggle DEMO->PROD.
+   - Node-by-node explanation with sample payloads.
+   - Security considerations (HMAC verification, HTTPS endpoints, rate limiting).
+3. Example test curl commands (demo and prod variants) and expected responses.
+4. Example JSON of the secure deep link format and steps to revoke links.
+5. A short sample n8n "email" node template (demo: log & write to Supabase 'outbox'; prod: send via SendGrid/Twilio SES — use env var to choose).
+6. A minimal "local emulator" stub script (Node.js) that can respond to webhook health checks for offline demos.
+
+Implementation details & constraints:
+- Use only standard n8n nodes (HTTP Request, Function, Set, If, Wait, SplitInBatches, Cron) and the community Redis node if available.
+- Keep sensitive data only in n8n credentials or environment variables; never store secrets in workflow JSON.
+- For DEMO mode, do not call external services — use internal mocks that replicate response shapes.
+- Add a "dry-run" node that shows what would be sent to each contact (editable in the UI).
+- Provide the workflow JSON so that the first node validates incoming payload schema (strict JSON Schema) and rejects invalid payloads with HTTP 400.
+- Provide example JSON Schema definitions for both webhooks and the Supabase audit log row.
+
+Acceptance checks (what to test locally):
+- Import workflows into n8n and POST a demo CARE_CIRCLE_STATUS webhook -> confirm log written to demo Supabase (or local sqlite), elder_nudge step triggered, and returned job_id.
+- POST a demo SHARE_SNIPPET webhook -> check that deep link created and outbox log exists.
+
+Return in this order:
+- 1) Short technical summary
+- 2) The workflow JSON (two flows) with comments
+- 3) README content (ENV vars, import steps, toggle instructions)
+- 4) Test curl commands and sample responses
+
+Important: Build this so that tomorrow, when real keys are provided, switching to PROD is only changing env vars (N8N_MODE=prod and setting N8N_WEBHOOK_SECRET and ELEVENLABS_API_KEY, SUPABASE keys).

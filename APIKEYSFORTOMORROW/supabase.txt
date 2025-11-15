@@ -1,0 +1,53 @@
+You are provisioning the Supabase schema, RLS policies, storage structure, and seed data for the "amily" MVP. Produce production-ready SQL and a migration file that works in DEMO MODE (local supabase or supabase CLI) and is ready for PROD. Include RLS policies, audit logs, and storage bucket configuration.
+
+Requirements (implement exactly):
+- Create tables exactly as specified in the product spec (users, entries, memories, buddies, messages, shares).
+- Use the SQL DDL provided by the product spec for column types and defaults.
+- Implement Row Level Security policies:
+  1) All tables: ENABLE RLS;
+  2) users: 
+    - SELECT: allow if auth.uid() = id OR jwt.role = 'admin'
+    - UPDATE: allow only if auth.uid() = id
+    - INSERT: admin-only (or registration function)
+  3) entries/memories/messages: 
+    - SELECT/UPDATE/DELETE: allow if auth.uid() = user_id OR jwt.role = 'admin' OR exists row in shares where shares.memory_id=memories.id AND shares.to_user_id=auth.uid()
+  4) shares: 
+    - INSERT: allow if auth.uid() = memory.user_id
+    - SELECT: allow if auth.uid() = to_user_id OR auth.uid() = memory.user_id OR jwt.role='admin'
+    - DELETE: allow if auth.uid() = memory.user_id OR jwt.role='admin'
+- Implement a secure function to create signed short-lived URLs for audio in storage (using supabase.storage.sign_url semantics) — provide SQL wrapper or a server-side function example that validates ownership before returning a signed URL.
+- Setup Supabase Storage buckets:
+  - audio/entries
+  - audio/memories
+  - audio/messages
+  Each bucket: private, no public read, with lifecycle policy for demo (e.g., 7 days) and for prod (configurable).
+- Audit logs table and trigger:
+  - CREATE TABLE audit_logs (id, actor uuid, action text, resource text, payload jsonb, ts timestamptz default now());
+  - Trigger to write to audit_log on inserts to shares, entries, memories, messages.
+- Security & PII handling:
+  - Provide SQL function sanitize_text(text) RETURNS text that strips emails/phones using regex; run this as a BEFORE INSERT/UPDATE trigger on transcript fields.
+  - Provide policy or server check that the server-side AI calls (server role) bypass RLS but only from the server with SERVICE_ROLE key.
+- Seed script:
+  - One demo user with passcode hash (provide example bcrypt hash), two sample memories entries (transcripts stub), one buddy pair, two buddy messages (placeholder audio_url pointing to demo storage).
+- Provide a migration SQL file and a separate “RLS_policies.sql” with clear comments.
+- Provide a quick supabase CLI commands list to apply migrations and to set up local env.
+- Provide sample SQL to create the minimal "outbox" table used by n8n demo email flow.
+
+Deliverables:
+1. migration.sql (DDL)
+2. RLS_policies.sql
+3. triggers_and_helpers.sql (sanitize_text, audit trigger, sign_url wrapper example)
+4. seed.sql (demo content)
+5. README: steps to run locally, env vars required (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY), how to run migrations, and how to toggle lifecycle policy between 7 days (demo) and 365 days (prod).
+6. Example PostgREST or server call to request a signed URL via server wrapper (curl) including validation examples.
+
+Important constraints:
+- The DB code must enforce the PlanJSON/MemoryJSON/SummaryJSON shapes at insert time: add CHECK constraints using json_schema validation where available, or add triggers to validate JSON structure (and auto-repair minor missing fields: add empty strings or default arrays).
+- Add indexes for queries: entries(user_id, ts), memories(user_id, ts), buddies(user_a,user_b).
+- Privacy: transcripts stored encrypted at rest (note in README how to enable DB encryption at rest) and sanitized via trigger.
+- RLS must be strict; provide sample jwt claims used by client and server (e.g., { "sub": "<uuid>", "role": "authenticated", "email": "x" } for clients; server uses role "service_role").
+
+Return:
+- All SQL files inline in order (migration.sql, RLS_policies.sql, triggers_and_helpers.sql, seed.sql) and README content.
+
+Make this robust, commented, and demo-ready so tomorrow when keys arrive you only change env vars.

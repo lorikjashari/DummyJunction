@@ -1,0 +1,60 @@
+You are building the LLM orchestration layer for the amily MVP. Implement a robust server-side "LLM orchestrator" that uses Featherless.ai (primary) with OSS models and falls back to Ollama (local) when FEATHERLESS_API_KEY or network is not available. The orchestrator must enforce strict JSON outputs for PlanJSON, MemoryJSON, and SummaryJSON, validate and auto-repair minor issues, and log calls. Provide code, prompt templates, schema validators, and sample prompts.
+
+Goals:
+- Provide a "call_llm_for" API:
+  • POST /ai/plan { transcript, user_context? } => returns PlanJSON
+  • POST /ai/memory { transcript, user_context? } => returns MemoryJSON
+  • POST /ai/summarize-note { transcript, tone_preference? } => returns SummaryJSON
+- Behavior:
+  - Primary: call Featherless.ai inference endpoints with model selection logic:
+    • Prefer smaller fast models for summarize-note (e.g., Llama-3.1-8B or Mistral-7B)
+    • Prefer stronger models for memory extraction / plan generation (e.g., Llama-3.1-70B or Qwen-2.5-32B) but allow cost/perf tradeoff via dynamic config.
+  - Fallback: if Featherless endpoints fail or FEATHERLESS_API_KEY is absent, call local Ollama (OLLAMA_BASE_URL) with equivalent prompt and model.
+  - All calls must request **structured JSON-only** outputs by using instruction templates, output schema enforcement, and a final "JSON-only" constraint.
+  - If the model outputs text with commentary, the server must extract the final JSON block. If invalid, attempt auto-repair:
+    • First try a deterministic JSON extraction (regex for first { ... } block).
+    • If extraction fails, call the model again with "You returned invalid JSON; please re-output only the JSON object that matches the schema."
+    • After two attempts, if still invalid, return 500 and mark the entry for manual review.
+- Prompt engineering (include exact templates):
+  • Plan prompt: include transcript, max length 90 tokens for summary, enforce PlanJSON keys exactly. Provide examples.
+  • Memory prompt: instruct model to output title (short), era (single phrase), story_3_sentences (3-4 sentences), tags array (3 max), quote (one line).
+  • Summarize-note prompt: produce SummaryJSON with tone warm|neutral and a suggested next action (one sentence).
+- Schema enforcement:
+  • Write JSON Schemas for PlanJSON, MemoryJSON, SummaryJSON.
+  • Validate server-side (AJV or equivalent). If missing fields: auto-fill: empty string or default mood 'ok' or [] tags.
+  • If mood is not one of ['low','ok','good'] map model outputs (sad->low, neutral->ok, happy->good).
+- Streaming & latency:
+  • Use Featherless streaming endpoints when available; stream partial tokens for real-time UI progress bar.
+  • For demo mode, simulate streaming with timed chunked responses.
+- Security:
+  • Strip PII from transcripts before sending to external LLMs using sanitize_text trigger in DB or server-side regex.
+  • Record hashed transcript IDs hashed with HMAC(JWT_SECRET) before sending to remote LLM for traceability.
+- Config:
+  • ENV: FEATHERLESS_API_KEY, FEATHERLESS_URL, OLLAMA_BASE_URL, LLM_DEFAULT_MODEL, LLM_FALLBACK_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE.
+- Deliverables:
+  1) LLM orchestrator module (Node.js/TS) with API endpoints, prompt templates, and model selection logic.
+  2) JSON Schema files for the three contracts and server-side validator code.
+  3) Example prompts (exact strings) that guarantee JSON-only output — include a final "STRICT_JSON_OUTPUT" guard paragraph.
+  4) Example fallback flow demonstrating the switch to Ollama via env flag.
+  5) Unit tests for valid/invalid model outputs demonstrating auto-repair logic.
+  6) README: how to switch to Ollama for offline demos (OLLAMA_BASE_URL), and how to run a local Ollama container for tomorrow's offline fallback.
+- Example Plan prompt (must be included verbatim):
+  """
+  You are a compassionate assistant that reads an older adult's short voice check-in transcript and outputs a JSON object EXACTLY matching this schema: { "summary": "string", "next_step": "string", "mood": "low|ok|good", "tags": ["..."] }.
+  Rules:
+  - Output ONLY the JSON object. No explanation.
+  - summary: 1-2 short sentences (max 90 tokens).
+  - next_step: single action phrase (imperative sentence).
+  - mood: map tone to one of low|ok|good.
+  - tags: 1-4 short tags from the set [routine, social, mobility, health, chores, mood].
+  Transcript:
+  \"\"\"<TRANSCRIPT HERE>\"\"\"
+  STRICT_JSON_OUTPUT:
+  """
+- Logging:
+  • Log request_id, model used, latency, token counts.
+  • Store a compact model response fingerprint for debugging.
+- Acceptance:
+  • Provide a sample transcript and show expected PlanJSON, MemoryJSON, and SummaryJSON.
+
+Important: Keep the prompts strict to avoid hallucinations and ensure the orchestration handles retries and fallback automatically. Return the orchestrator code + schema files + test snippets.

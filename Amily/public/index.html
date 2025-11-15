@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amily - Premium Digital Companion</title>
+    <link rel="icon" type="image/png" href="/logo.png" />
+    
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @keyframes blob {
+            0%, 100% {
+                transform: translate(0, 0) scale(1);
+            }
+            33% {
+                transform: translate(30px, -50px) scale(1.1);
+            }
+            66% {
+                transform: translate(-20px, 20px) scale(0.9);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-blob {
+            animation: blob 7s infinite;
+        }
+
+        .animate-slideIn {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .animation-delay-200 {
+            animation-delay: 200ms;
+        }
+
+        .animation-delay-400 {
+            animation-delay: 400ms;
+        }
+
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
+
+        .animation-delay-4000 {
+            animation-delay: 4s;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+
+        // Icon Components
+        const ShieldIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2m0 0l4-4m-4 4V7m0 6h6m-6 0H7" /></svg>;
+        const HeartIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>;
+        const CalendarIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
+        const BookOpenIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17.25m20-11.197C17.5 6.253 13 10.998 13 17.25m0-13v13m0-13C19.5 6.253 24 10.998 24 17.25" /></svg>;
+        const UsersIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 8.048M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const SparklesIcon = () => <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M9.153 21.064c-.597.095-1.17-.341-1.142-1.022l.706-19.895a.75.75 0 0 1 1.494.098l-.707 19.9c-.029.692-.584 1.122-1.351 1.919zm.921.815a.75.75 0 0 1-.545-1.28c.769-.721 2.546-2.399 2.546-5.681 0-3.283-1.777-4.96-2.546-5.681a.75.75 0 0 1 1.091-1.028c.987.905 2.455 2.369 2.455 6.709 0 4.34-1.468 5.804-2.455 6.709a.75.75 0 0 1-.546.271z" /></svg>;
+        const ActivityIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 18h.01M4 18h.01M3.172 6.172a4 4 0 015.656 0L12 10.343m5.656-4.171a4 4 0 010 5.656L12 20.343M9 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+        const DropletsIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3v-6" /></svg>;
+        const PillIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2m4-4l2 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+        const PhoneIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>;
+        const MenuIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+        const SendIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>;
+        const SaveIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>;
+        const AlertTriangleIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 0v2m0-6a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
+        const SunIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
+        const MoonIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>;
+        const XIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
+
+        // FeatureCard Component
+        function FeatureCard({ icon: Icon, title, description, gradient, darkMode }) {
+            return (
+                <div className={`group relative rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border ${
+                    darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+                }`}>
+                    <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-br ${gradient} mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300 text-white`}>
+                        <Icon />
+                    </div>
+                    <h3 className={`text-xl font-bold mb-3 group-hover:text-rose-400 transition-colors ${
+                        darkMode ? 'text-gray-100' : 'text-gray-900'
+                    }`}>
+                        {title}
+                    </h3>
+                    <p className={`leading-relaxed ${
+                        darkMode ? 'text-gray-300' : 'text-gray-600'
+                    }`}>
+                        {description}
+                    </p>
+                </div>
+            );
+        }
+
+        // Navigation Component
+        function Navigation({ systemStatus, darkMode, toggleDarkMode }) {
+            const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+            const navItems = [
+                { label: 'Home', href: '#home' },
+                { label: 'Check-in', href: '#checkin' },
+                { label: 'Safety', href: '#safety' },
+                { label: 'Wellness', href: '#wellness' },
+                { label: 'Memories', href: '#memories' },
+                { label: 'Support', href: '#empathy' }
+            ];
+
+            const getStatusColor = () => {
+                if (systemStatus === 'loading') return 'bg-gray-400';
+                if (systemStatus === 'offline') return 'bg-gray-500';
+                return 'bg-emerald-500';
+            };
+
+            return (
+                <nav className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-lg border-b shadow-sm transition-colors ${
+                    darkMode ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-rose-100'
+                }`}>
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center justify-between h-16">
+                            <a href="#home" className="flex items-center group">
+                                <img src="/logo.png" alt="Amily" className="w-16 h-16 transform transition-transform group-hover:scale-110" />
+                            </a>
+
+                            <div className="hidden md:flex items-center gap-1">
+                                {navItems.map((item) => (
+                                    <a
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                            darkMode 
+                                                ? 'text-gray-300 hover:text-rose-400 hover:bg-gray-800' 
+                                                : 'text-gray-700 hover:text-rose-600 hover:bg-rose-50'
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </a>
+                                ))}
+                                <div className="ml-4 flex items-center gap-3">
+                                    <button
+                                        onClick={toggleDarkMode}
+                                        className={`p-2 rounded-lg transition-all duration-200 ${
+                                            darkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        aria-label="Toggle dark mode"
+                                    >
+                                        {darkMode ? <SunIcon /> : <MoonIcon />}
+                                    </button>
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
+                                        darkMode ? 'bg-gray-800' : 'bg-gray-50'
+                                    }`}>
+                                        <div className={`w-2 h-2 rounded-full ${getStatusColor()} animate-pulse`} />
+                                        <span className={`text-xs font-medium uppercase ${
+                                            darkMode ? 'text-gray-300' : 'text-gray-600'
+                                        }`}>{systemStatus}</span>
+                                    </div>
+                                    <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-full font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200">
+                                        <PhoneIcon />
+                                        <span className="hidden lg:inline">Emergency</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                className={`md:hidden p-2 rounded-lg ${darkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100'}`}
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            >
+                                {isMenuOpen ? <XIcon /> : <MenuIcon />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {isMenuOpen && (
+                        <div className={`md:hidden border-t ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-rose-100'}`}>
+                            <div className="px-4 py-3 space-y-1">
+                                {navItems.map((item) => (
+                                    <a
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`block px-4 py-2 rounded-lg text-sm font-medium ${
+                                            darkMode 
+                                                ? 'text-gray-300 hover:text-rose-400 hover:bg-gray-800' 
+                                                : 'text-gray-700 hover:text-rose-600 hover:bg-rose-50'
+                                        }`}
+                                        onClick={() => setIsMenuOpen(false)}
+                                    >
+                                        {item.label}
+                                    </a>
+                                ))}
+                                <button
+                                    onClick={toggleDarkMode}
+                                    className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                                        darkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {darkMode ? <SunIcon /> : <MoonIcon />}
+                                    <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </nav>
+            );
+        }
+
+        // Hero Component
+        function Hero({ darkMode }) {
+            return (
+                <section id="home" className="relative pt-32 pb-20 overflow-hidden">
+                    <div className={`absolute inset-0 ${
+                        darkMode 
+                            ? 'bg-gradient-to-br from-gray-800/50 via-transparent to-gray-700/50' 
+                            : 'bg-gradient-to-br from-rose-100/50 via-transparent to-orange-100/50'
+                    }`} />
+
+                    <div className={`absolute top-20 left-10 w-72 h-72 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob ${
+                        darkMode ? 'bg-rose-400' : 'bg-rose-200'
+                    }`} />
+                    <div className={`absolute top-40 right-10 w-72 h-72 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000 ${
+                        darkMode ? 'bg-orange-400' : 'bg-orange-200'
+                    }`} />
+                    <div className={`absolute bottom-20 left-1/2 w-72 h-72 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000 ${
+                        darkMode ? 'bg-pink-400' : 'bg-pink-200'
+                    }`} />
+
+                    <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6">
+                            <span className="bg-gradient-to-r from-rose-600 via-pink-600 to-orange-600 bg-clip-text text-transparent">
+                                Amily Companion
+                            </span>
+                        </h1>
+
+                        <p className={`text-xl md:text-2xl mb-8 max-w-2xl mx-auto leading-relaxed ${
+                            darkMode ? 'text-gray-300' : 'text-gray-600'
+                        }`}>
+                            A gentle, patient digital companion designed with love for elderly users
+                        </p>
+
+                        <div className="relative max-w-2xl mx-auto mb-12">
+                            <div className="absolute inset-0 bg-gradient-to-r from-rose-500 to-orange-500 rounded-2xl blur opacity-20" />
+                            <blockquote className={`relative rounded-2xl p-8 shadow-xl border ${
+                                darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-rose-100'
+                            }`}>
+                                <SparklesIcon />
+                                <p className={`text-lg md:text-xl italic leading-relaxed mt-2 ${
+                                    darkMode ? 'text-gray-200' : 'text-gray-700'
+                                }`}>
+                                    "Hello... I am Amily. I am here to help you feel calm, safe, and understood."
+                                </p>
+                            </blockquote>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center gap-4">
+                            <button className="group px-8 py-4 bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-full font-semibold text-lg shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200">
+                                <span className="flex items-center gap-2">
+                                    Get Started
+                                    <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                </span>
+                            </button>
+                            <a
+                                href="#checkin"
+                                className={`px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 border-2 ${
+                                    darkMode 
+                                        ? 'bg-gray-800 text-rose-400 border-rose-400' 
+                                        : 'bg-white text-rose-600 border-rose-200'
+                                }`}
+                            >
+                                Try Demo
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // CheckInDemo Component
+        function CheckInDemo({ darkMode }) {
+            const [mood, setMood] = useState('ok');
+            const [messages, setMessages] = useState([
+                { type: 'amily', text: "Good morning... how are you feeling today?" }
+            ]);
+            const [input, setInput] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const moods = [
+                { value: 'low', emoji: '😔', label: 'Low' },
+                { value: 'ok', emoji: '😊', label: 'Okay' },
+                { value: 'good', emoji: '😄', label: 'Good' }
+            ];
+
+            const handleSubmit = async () => {
+                if (!input.trim() && !mood) return;
+
+                const userText = input || `I am feeling ${mood} today`;
+                setMessages(prev => [...prev, { type: 'user', text: userText }]);
+                setInput('');
+                setIsLoading(true);
+
+                try {
+                    const response = await fetch('/api/checkin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: 'demo-user',
+                            input: userText
+                        })
+                    });
+                    const data = await response.json();
+
+                    setTimeout(() => {
+                        setMessages(prev => [...prev, {
+                            type: 'amily',
+                            text: data.summary || "I am here for you."
+                        }]);
+                        setIsLoading(false);
+                    }, 500);
+                } catch (error) {
+                    setMessages(prev => [...prev, {
+                        type: 'amily',
+                        text: "I am here for you. Let us take this one step at a time."
+                    }]);
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <section id="checkin" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className={`rounded-3xl shadow-2xl overflow-hidden border ${
+                        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+                    }`}>
+                        <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-8 text-white">
+                            <div className="flex items-center gap-3 mb-3">
+                                <CalendarIcon />
+                                <h2 className="text-3xl font-bold">Daily Check-in</h2>
+                            </div>
+                            <p className="text-amber-50 text-lg">Share how you are feeling and get a personalized plan for the day</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="flex gap-3 mb-6 justify-center flex-wrap">
+                                {moods.map((m) => (
+                                    <button
+                                        key={m.value}
+                                        onClick={() => setMood(m.value)}
+                                        className={`flex flex-col items-center gap-2 px-6 py-4 rounded-2xl border-2 transition-all duration-200 ${
+                                            mood === m.value
+                                                ? 'border-orange-500 bg-orange-50 scale-105 shadow-lg'
+                                                : 'border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50'
+                                        }`}
+                                    >
+                                        <span className="text-4xl">{m.emoji}</span>
+                                        <span className="font-semibold text-gray-700">{m.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-6 mb-6 max-h-96 overflow-y-auto space-y-4">
+                                {messages.map((msg, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                        <div
+                                            className={`max-w-md rounded-2xl p-4 shadow-md ${
+                                                msg.type === 'user'
+                                                    ? 'bg-white border border-gray-200'
+                                                    : 'bg-gradient-to-br from-orange-500 to-amber-500 text-white'
+                                            }`}
+                                        >
+                                            <div className="font-semibold text-sm mb-1 opacity-90">
+                                                {msg.type === 'user' ? 'You' : 'Amily'}
+                                            </div>
+                                            <div className="leading-relaxed">{msg.text}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {isLoading && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-gradient-to-br from-orange-500 to-amber-500 text-white rounded-2xl p-4 shadow-md">
+                                            <div className="flex gap-2">
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce" />
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-200" />
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-400" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-3 flex-wrap">
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+                                    placeholder="Share how you are feeling..."
+                                    className="flex-1 min-w-48 px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all"
+                                />
+                                <button
+                                    onClick={handleSubmit}
+                                    disabled={isLoading}
+                                    className="px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <SendIcon />
+                                    Share
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // SafetyDemo Component
+        function SafetyDemo({ darkMode}) {
+            const [messages, setMessages] = useState([]);
+
+            const triggerSafety = async (phrase) => {
+                const alertMsg = {
+                    type: 'alert',
+                    title: '🚨 EMERGENCY ALERT',
+                    message: phrase
+                };
+                setMessages(prev => [...prev, alertMsg]);
+
+                try {
+                    const response = await fetch('/api/safety/emergency', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: 'demo-user', type: 'manual', location: { lat: 40.7128, lng: -74.0060 } })
+                    });
+                    const data = await response.json();
+
+                    setTimeout(() => {
+                        setMessages(prev => [...prev, {
+                            type: 'response',
+                            title: 'Care Circle Notified',
+                            message: data.message || 'Caregivers have been notified'
+                        }]);
+                    }, 500);
+                } catch (error) {
+                    console.error('Safety check failed:', error);
+                }
+            };
+
+            const emergencyScenarios = [
+                { phrase: 'I need help', icon: PhoneIcon, color: 'from-red-600 to-rose-600', label: 'Need Help' },
+                { phrase: 'I feel dizzy', icon: AlertTriangleIcon, color: 'from-orange-600 to-red-600', label: 'Feel Dizzy' },
+                { phrase: 'I fell down', icon: AlertTriangleIcon, color: 'from-rose-600 to-pink-600', label: 'Fall Detected' }
+            ];
+
+            return (
+                <section id="safety" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-red-100">
+                        <div className="bg-gradient-to-r from-red-500 to-rose-500 p-8 text-white">
+                            <div className="flex items-center gap-3 mb-3">
+                                <ShieldIcon />
+                                <h2 className="text-3xl font-bold">Safety Intelligence</h2>
+                            </div>
+                            <p className="text-red-50 text-lg">Instant emergency detection and caregiver alerts</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                                {emergencyScenarios.map((scenario, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => triggerSafety(scenario.phrase)}
+                                        className={`group relative overflow-hidden p-6 rounded-2xl bg-gradient-to-br ${scenario.color} text-white shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200`}
+                                    >
+                                        <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity" />
+                                        <div className="flex justify-center mb-2"><scenario.icon /></div>
+                                        <div className="font-semibold text-center">{scenario.label}</div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {messages.length > 0 && (
+                                <div className="space-y-4 mb-8">
+                                    {messages.map((msg, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`p-6 rounded-2xl border-l-4 shadow-lg animate-slideIn ${
+                                                msg.type === 'alert'
+                                                    ? 'bg-red-50 border-red-500'
+                                                    : 'bg-rose-50 border-rose-500'
+                                            }`}
+                                        >
+                                            <div className="font-bold text-lg text-red-600 mb-2">{msg.title}</div>
+                                            <div className="text-gray-700">{msg.message}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-2xl p-6 border border-red-200">
+                                <h3 className="font-bold text-lg text-red-600 mb-4">Safety Features</h3>
+                                <div className="grid md:grid-cols-2 gap-3">
+                                    {[
+                                        'Voice phrase detection',
+                                        'Fall detection',
+                                        'Heart rate monitoring',
+                                        'Instant caregiver notifications'
+                                    ].map((feature, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 text-gray-700">
+                                            <div className="w-2 h-2 bg-red-500 rounded-full" />
+                                            <span>{feature}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // WellnessDemo Component
+        function WellnessDemo({ darkMode }) {
+            const [nudges, setNudges] = useState(['💊 Time to take your medication', '💧 Do not forget to hydrate', '🚶 A little walk would do you good']);
+            const [waterCount, setWaterCount] = useState(3);
+
+            const logActivity = async (type) => {
+                if (type === 'water') setWaterCount(prev => prev + 1);
+                alert('✓ Activity logged!');
+            };
+
+            const wellnessActions = [
+                { type: 'water', icon: DropletsIcon, label: 'Drank Water', color: 'from-blue-500 to-cyan-500' },
+                { type: 'medication', icon: PillIcon, label: 'Took Meds', color: 'from-purple-500 to-pink-500' },
+                { type: 'activity', icon: ActivityIcon, label: 'Did Activity', color: 'from-emerald-500 to-teal-500' }
+            ];
+
+            return (
+                <section id="wellness" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+                        <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-8 text-white">
+                            <div className="flex items-center gap-3 mb-3">
+                                <ActivityIcon />
+                                <h2 className="text-3xl font-bold">Wellness Coaching</h2>
+                            </div>
+                            <p className="text-blue-50 text-lg">Stay healthy with gentle reminders and guidance</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="space-y-4 mb-8">
+                                {nudges.map((nudge, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="p-6 rounded-2xl border-l-4 shadow-md bg-blue-50 border-blue-500"
+                                    >
+                                        <div className="text-gray-900 font-medium">{nudge}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                                {wellnessActions.map((action) => (
+                                    <button
+                                        key={action.type}
+                                        onClick={() => logActivity(action.type)}
+                                        className={`p-6 rounded-2xl bg-gradient-to-br ${action.color} text-white shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-200 flex flex-col items-center`}
+                                    >
+                                        <action.icon />
+                                        <div className="font-semibold text-center mt-2">{action.label}</div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {[
+                                    { value: waterCount, label: 'Glasses of Water' },
+                                    { value: '✓', label: 'Morning Meds' },
+                                    { value: '72°F', label: 'Temperature' },
+                                    { value: '☀️', label: 'Sunny Day' }
+                                ].map((stat, idx) => (
+                                    <div key={idx} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 text-center shadow-md">
+                                        <div className="text-3xl font-bold text-blue-600 mb-2">{stat.value}</div>
+                                        <div className="text-sm text-gray-600">{stat.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // MemoryDemo Component
+        function MemoryDemo({ darkMode }) {
+            const [input, setInput] = useState('');
+            const [memories, setMemories] = useState([
+                {
+                    title: 'The Old Oak Tree',
+                    era: 'Childhood, 1950s',
+                    story: 'There was this big oak tree behind our house. My brother and I would climb it every summer. We had sit up there for hours, watching the world go by.'
+                }
+            ]);
+
+            const saveMemory = async () => {
+                if (!input.trim()) {
+                    alert('Please share a memory first...');
+                    return;
+                }
+
+                setMemories(prev => [{
+                    title: 'New Memory',
+                    era: new Date().getFullYear().toString(),
+                    story: input
+                }, ...prev]);
+                setInput('');
+                alert('✓ Memory saved');
+            };
+
+            return (
+                <section id="memories" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+                        <div className="bg-gradient-to-r from-purple-500 to-violet-500 p-8 text-white">
+                            <div className="flex items-center gap-3 mb-3">
+                                <BookOpenIcon />
+                                <h2 className="text-3xl font-bold">MemoryLane</h2>
+                            </div>
+                            <p className="text-purple-50 text-lg">Preserve precious memories and life stories</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="mb-8">
+                                <textarea
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    rows={4}
+                                    placeholder="Tell me about a special memory..."
+                                    className="w-full px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all resize-none"
+                                />
+                                <button
+                                    onClick={saveMemory}
+                                    className="mt-4 px-8 py-4 bg-gradient-to-r from-purple-500 to-violet-500 text-white rounded-2xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center gap-2"
+                                >
+                                    <SaveIcon />
+                                    Save This Memory
+                                </button>
+                            </div>
+
+                            <div>
+                                <h3 className="text-2xl font-bold text-gray-900 mb-6">Your Saved Memories</h3>
+                                <div className="space-y-6">
+                                    {memories.map((memory, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="p-6 bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl border-l-4 border-purple-500 shadow-md"
+                                        >
+                                            <h4 className="text-xl font-bold text-purple-600 mb-2">{memory.title}</h4>
+                                            <div className="text-sm text-gray-500 mb-3">{memory.era}</div>
+                                            <p className="text-gray-700 leading-relaxed">{memory.story}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // EmpathyDemo Component
+        function EmpathyDemo({ darkMode }) {
+            const [messages, setMessages] = useState([]);
+            const [input, setInput] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const sendMessage = async () => {
+                if (!input.trim()) return;
+
+                const userText = input;
+                setMessages(prev => [...prev, { type: 'user', text: userText }]);
+                setInput('');
+                setIsLoading(true);
+
+                try {
+                    const response = await fetch('/api/empathy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: 'demo-user', input: userText })
+                    });
+                    const data = await response.json();
+
+                    setTimeout(() => {
+                        setMessages(prev => [...prev, { type: 'amily', text: data.summary || 'I am here for you' }]);
+                        setIsLoading(false);
+                    }, 500);
+                } catch (error) {
+                    setMessages(prev => [...prev, {
+                        type: 'amily',
+                        text: "I am here for you. Let me listen..."
+                    }]);
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <section id="empathy" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
+                        <div className="bg-gradient-to-r from-rose-500 to-red-500 p-8 text-white">
+                            <div className="flex items-center gap-3 mb-3">
+                                <HeartIcon />
+                                <h2 className="text-3xl font-bold">Empathetic Support</h2>
+                            </div>
+                            <p className="text-rose-50 text-lg">Amily listens and responds with genuine care</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="bg-gradient-to-br from-rose-50 to-red-50 rounded-2xl p-6 mb-6 min-h-64 max-h-96 overflow-y-auto space-y-4">
+                                {messages.length === 0 ? (
+                                    <div className="text-center text-gray-500 py-12">
+                                        <p className="text-lg">Share how you are feeling...</p>
+                                    </div>
+                                ) : (
+                                    messages.map((msg, idx) => (
+                                        <div
+                                            key={idx}
+                                            className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                            <div
+                                                className={`max-w-md rounded-2xl p-4 shadow-md ${
+                                                    msg.type === 'user'
+                                                        ? 'bg-white border border-gray-200'
+                                                        : 'bg-gradient-to-br from-rose-500 to-red-500 text-white'
+                                                }`}
+                                            >
+                                                <div className="font-semibold text-sm mb-1 opacity-90">
+                                                    {msg.type === 'user' ? 'You' : 'Amily'}
+                                                </div>
+                                                <div className="leading-relaxed">{msg.text}</div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                                {isLoading && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-gradient-to-br from-rose-500 to-red-500 text-white rounded-2xl p-4 shadow-md">
+                                            <div className="flex gap-2">
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce" />
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-200" />
+                                                <div className="w-2 h-2 bg-white rounded-full animate-bounce animation-delay-400" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-3 flex-wrap">
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                                    placeholder="Tell Amily how you are feeling..."
+                                    className="flex-1 min-w-48 px-6 py-4 border-2 border-gray-200 rounded-2xl focus:border-rose-500 focus:ring-4 focus:ring-rose-100 outline-none transition-all"
+                                />
+                                <button
+                                    onClick={sendMessage}
+                                    disabled={isLoading}
+                                    className="px-8 py-4 bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-2xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <SendIcon />
+                                    Share
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+                                {[
+                                    { value: '7', label: 'Check-ins this week' },
+                                    { value: '12', label: 'Memories saved' },
+                                    { value: '5', label: 'Friends connected' },
+                                    { value: '85%', label: 'Wellness Score' }
+                                ].map((stat, idx) => (
+                                    <div key={idx} className="bg-gradient-to-br from-rose-50 to-red-50 rounded-2xl p-6 text-center shadow-md border border-rose-100">
+                                        <div className="text-3xl font-bold text-rose-600 mb-2">{stat.value}</div>
+                                        <div className="text-sm text-gray-600">{stat.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [systemStatus] = useState('online');
+            const [darkMode, setDarkMode] = useState(false);
+
+            const toggleDarkMode = () => {
+                setDarkMode(!darkMode);
+            };
+
+            const features = [
+                {
+                    icon: ShieldIcon,
+                    title: 'Safety Intelligence',
+                    description: 'Emergency detection, vitals monitoring, and instant caregiver alerts',
+                    gradient: 'from-rose-500 to-pink-500'
+                },
+                {
+                    icon: PillIcon,
+                    title: 'Wellness Coaching',
+                    description: 'Medication reminders, hydration tracking, and weather-aware guidance',
+                    gradient: 'from-blue-500 to-cyan-500'
+                },
+                {
+                    icon: CalendarIcon,
+                    title: 'Daily Check-ins',
+                    description: 'Mood assessment and gentle planning for the day ahead',
+                    gradient: 'from-amber-500 to-orange-500'
+                },
+                {
+                    icon: BookOpenIcon,
+                    title: 'MemoryLane',
+                    description: 'Record and preserve precious life stories and memories',
+                    gradient: 'from-purple-500 to-violet-500'
+                },
+                {
+                    icon: UsersIcon,
+                    title: 'Buddy System',
+                    description: 'Safe social engagement with voice messages and support',
+                    gradient: 'from-emerald-500 to-teal-500'
+                },
+                {
+                    icon: HeartIcon,
+                    title: 'Empathetic Care',
+                    description: 'Emotion detection and warm, reassuring responses',
+                    gradient: 'from-rose-500 to-red-500'
+                }
+            ];
+
+            return (
+                <div className={`min-h-screen transition-colors duration-300 ${
+                    darkMode 
+                        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+                        : 'bg-gradient-to-br from-rose-50 via-white to-orange-50'
+                }`}>
+                    <Navigation systemStatus={systemStatus} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+
+                    <main className="relative">
+                        <Hero darkMode={darkMode} />
+
+                        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {features.map((feature, index) => (
+                                    <FeatureCard key={index} {...feature} darkMode={darkMode} />
+                                ))}
+                            </div>
+                        </section>
+
+                        <CheckInDemo darkMode={darkMode} />
+                        <SafetyDemo darkMode={darkMode} />
+                        <WellnessDemo darkMode={darkMode} />
+                        <MemoryDemo darkMode={darkMode} />
+                        <EmpathyDemo darkMode={darkMode} />
+
+                        <footer className="bg-gradient-to-r from-rose-500 to-orange-500 text-white py-12 mt-32">
+                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                                <p className="text-lg font-medium mb-2">Built with care for those who deserve patience, dignity, and warmth.</p>
+                                <p className="text-rose-100">Version 1.0.0 | Amily Companion</p>
+                            </div>
+                        </footer>
+                    </main>
+                </div>
+            );
+        }
+
+        // Mount the app
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
