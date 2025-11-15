@@ -167,7 +167,7 @@
         }
 
         // Navigation Component
-        function Navigation({ systemStatus, darkMode, toggleDarkMode, currentPage, onNavigate }) {
+        function Navigation({ systemStatus, darkMode, currentPage, onNavigate }) {
             const [isMenuOpen, setIsMenuOpen] = useState(false);
 
             const navItems = [
@@ -211,15 +211,6 @@
                                     </button>
                                 ))}
                                 <div className="ml-4 flex items-center gap-3">
-                                    <button
-                                        onClick={toggleDarkMode}
-                                        className={`p-2 rounded-lg transition-all duration-200 ${
-                                            darkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                        aria-label="Toggle dark mode"
-                                    >
-                                        {darkMode ? <SunIcon /> : <MoonIcon />}
-                                    </button>
                                     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
                                         darkMode ? 'bg-gray-800' : 'bg-gray-50'
                                     }`}>
@@ -264,15 +255,6 @@
                                         {item.label}
                                     </button>
                                 ))}
-                                <button
-                                    onClick={toggleDarkMode}
-                                    className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                                        darkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-700 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    {darkMode ? <SunIcon /> : <MoonIcon />}
-                                    <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
-                                </button>
                             </div>
                         </div>
                     )}
@@ -1249,12 +1231,8 @@
         // Main App Component
         function App() {
             const [systemStatus] = useState('online');
-            const [darkMode, setDarkMode] = useState(false);
+            const darkMode = true; // Always dark mode
             const [currentPage, setCurrentPage] = useState('home');
-
-            const toggleDarkMode = () => {
-                setDarkMode(!darkMode);
-            };
 
             const handleNavigate = (pageId) => {
                 setCurrentPage(pageId);
@@ -1310,7 +1288,6 @@
                     <Navigation
                         systemStatus={systemStatus}
                         darkMode={darkMode}
-                        toggleDarkMode={toggleDarkMode}
                         currentPage={currentPage}
                         onNavigate={handleNavigate}
                     />
