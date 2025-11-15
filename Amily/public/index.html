@@ -112,9 +112,33 @@
 
         // FeatureCard Component
         function FeatureCard({ icon: Icon, title, description, gradient, darkMode }) {
+            const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
+
+            const handleMouseMove = (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+
+                const rotateX = ((y - centerY) / centerY) * -10; // tilt towards cursor
+                const rotateY = ((x - centerX) / centerX) * 10;
+
+                setTilt({ rotateX, rotateY });
+            };
+
+            const handleMouseLeave = () => {
+                setTilt({ rotateX: 0, rotateY: 0 });
+            };
+
             return (
                 <div
-                    className={`group relative overflow-hidden rounded-3xl p-8 transition-all duration-300 transform hover:-translate-y-2 hover:drop-shadow-glow border ${
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                    style={{
+                        transform: `perspective(900px) rotateX(${tilt.rotateX}deg) rotateY(${tilt.rotateY}deg)`,
+                    }}
+                    className={`group relative overflow-hidden rounded-3xl p-8 transition-transform duration-300 hover:drop-shadow-glow border ${
                         darkMode
                             ? 'bg-gradient-to-b from-slate-950/90 via-slate-900/70 to-slate-900/40 border-slate-700/80'
                             : 'bg-gradient-to-b from-white via-rose-50/70 to-orange-50/40 border-rose-100'
@@ -167,7 +191,7 @@
         }
 
         // Navigation Component
-        function Navigation({ systemStatus, darkMode, currentPage, onNavigate }) {
+        function Navigation({ systemStatus, darkMode, currentPage, onNavigate, onLogout }) {
             const [isMenuOpen, setIsMenuOpen] = useState(false);
 
             const navItems = [
@@ -223,6 +247,19 @@
                                         <PhoneIcon />
                                         <span className="hidden lg:inline">Emergency</span>
                                     </button>
+                                    {onLogout && (
+                                        <button
+                                            type="button"
+                                            onClick={onLogout}
+                                            className={`px-4 py-2 rounded-full text-xs font-semibold border transition-all duration-200 ${
+                                                darkMode
+                                                    ? 'border-slate-600 text-slate-200 hover:bg-slate-900'
+                                                    : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            Log out
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -255,6 +292,22 @@
                                         {item.label}
                                     </button>
                                 ))}
+                                {onLogout && (
+                                    <button
+                                        type="button"
+                                        className={`mt-2 block w-full text-left px-4 py-2 rounded-lg text-sm font-semibold border ${
+                                            darkMode
+                                                ? 'border-slate-600 text-slate-200 hover:bg-slate-900'
+                                                : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                        onClick={() => {
+                                            onLogout();
+                                            setIsMenuOpen(false);
+                                        }}
+                                    >
+                                        Log out
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -263,7 +316,26 @@
         }
 
         // Hero Component
-        function Hero({ darkMode, onNavigate }) {
+        function Hero({ darkMode, isLoggedIn, onNavigate }) {
+            const [cardTilt, setCardTilt] = useState({ rotateX: 0, rotateY: 0 });
+
+            const handleCardMouseMove = (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+
+                const rotateX = ((y - centerY) / centerY) * -10;
+                const rotateY = ((x - centerX) / centerX) * 10;
+
+                setCardTilt({ rotateX, rotateY });
+            };
+
+            const handleCardMouseLeave = () => {
+                setCardTilt({ rotateX: 0, rotateY: 0 });
+            };
+
             return (
                 <section id="home" className="relative pt-32 pb-24 overflow-hidden">
                     <div
@@ -322,15 +394,15 @@
                                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
                                     <button
                                         type="button"
-                                        onClick={() => onNavigate('checkin')}
+                                        onClick={() => onNavigate(isLoggedIn ? 'checkin' : 'login')}
                                         className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-orange-500 text-white text-sm md:text-base font-semibold shadow-lg hover:shadow-2xl hover:scale-[1.03] active:scale-[0.99] transition-all duration-200"
                                     >
-                                        <span>Try the daily check-in</span>
+                                        <span>{isLoggedIn ? 'Try the daily check-in' : 'Log in'}</span>
                                         <span className="group-hover:translate-x-1 transition-transform text-lg">→</span>
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => onNavigate('safety')}
+                                        onClick={() => onNavigate(isLoggedIn ? 'safety' : 'signup')}
                                         className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm md:text-base font-semibold border transition-all duration-200 ${
                                             darkMode
                                                 ? 'bg-slate-900/60 border-slate-700 text-slate-100 hover:border-rose-400 hover:bg-slate-900/90'
@@ -338,7 +410,7 @@
                                         }`}
                                     >
                                         <ShieldIcon />
-                                        <span>See safety features</span>
+                                        <span>{isLoggedIn ? 'See safety features' : 'Create an account'}</span>
                                     </button>
                                 </div>
 
@@ -358,7 +430,16 @@
                                 </div>
                             </div>
 
-                            <div className="relative">
+                            <div
+                                className="relative"
+                                onMouseMove={handleCardMouseMove}
+                                onMouseLeave={handleCardMouseLeave}
+                                style={{
+                                    transform: `perspective(900px) rotateX(${cardTilt.rotateX}deg) rotateY(${cardTilt.rotateY}deg)`,
+                                    transformStyle: 'preserve-3d',
+                                    transition: 'transform 150ms ease-out',
+                                }}
+                            >
                                 <div
                                     className={`relative rounded-3xl border shadow-2xl overflow-hidden backdrop-blur-xl ${
                                         darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-rose-100'
@@ -1228,11 +1309,391 @@
             );
         }
 
+        // Login Page
+        function LoginPage({ darkMode, onAuthSuccess }) {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [status, setStatus] = useState(null);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setStatus({ type: 'loading', message: 'Logging you in…' });
+
+                try {
+                    const res = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password }),
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success) {
+                        setStatus({ type: 'error', message: data.error || 'Could not log you in.' });
+                    } else {
+                        setStatus({ type: 'success', message: 'Logged in successfully.' });
+                        if (onAuthSuccess) onAuthSuccess();
+                    }
+                } catch (err) {
+                    setStatus({ type: 'error', message: 'Network error while logging in.' });
+                }
+            };
+
+            return (
+                <section id="login" className="relative py-20">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex flex-col gap-3 mb-8 text-center sm:text-left">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-semibold uppercase tracking-[0.26em] mx-auto sm:mx-0 bg-black/5 backdrop-blur-sm">
+                                <UsersIcon />
+                                <span className={darkMode ? 'text-slate-200' : 'text-slate-700'}>Welcome back</span>
+                            </div>
+                            <div className="space-y-1">
+                                <h2 className={`font-display text-3xl sm:text-4xl font-bold ${
+                                    darkMode ? 'text-slate-50' : 'text-slate-900'
+                                }`}>
+                                    Log in to your Amily space.
+                                </h2>
+                                <p className={darkMode ? 'text-slate-400 text-sm sm:text-base' : 'text-slate-600 text-sm sm:text-base'}>
+                                    Continue where you left off with check-ins, memories, and your care circle.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            className={`rounded-3xl border shadow-2xl overflow-hidden backdrop-blur-xl ${
+                                darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-slate-100'
+                            }`}
+                        >
+                            <div className="grid gap-0 md:grid-cols-[minmax(0,1.1fr),minmax(0,0.9fr)]">
+                                <div className="p-6 sm:p-8 border-b md:border-b-0 md:border-r border-white/10">
+                                    <form className="space-y-5" onSubmit={handleSubmit}>
+                                        <div className="space-y-2">
+                                            <label
+                                                className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                            >
+                                                Email
+                                            </label>
+                                            <input
+                                                type="email"
+                                                required
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                placeholder="you@example.com"
+                                                className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/60 ${
+                                                    darkMode
+                                                        ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                        : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                }`}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label
+                                                className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                            >
+                                                Password
+                                            </label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                placeholder="Enter your password"
+                                                className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-400/60 ${
+                                                    darkMode
+                                                        ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                        : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                }`}
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                            <label className="inline-flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="rounded border-slate-600 bg-slate-950 text-rose-500 focus:ring-rose-500/60"
+                                                />
+                                                <span>Keep me logged in</span>
+                                            </label>
+                                            <button
+                                                type="button"
+                                                className="text-rose-300 hover:text-rose-200 underline-offset-4 hover:underline"
+                                            >
+                                                Forgot password?
+                                            </button>
+                                        </div>
+                                        {status && (
+                                            <div
+                                                className={`text-xs rounded-2xl px-3 py-2 ${
+                                                    status.type === 'success'
+                                                        ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-500/40'
+                                                        : status.type === 'error'
+                                                        ? 'bg-red-900/40 text-red-100 border border-red-500/40'
+                                                        : 'bg-slate-900/40 text-slate-200 border border-slate-700/40'
+                                                }`}
+                                            >
+                                                {status.message}
+                                            </div>
+                                        )}
+                                        <button
+                                            type="submit"
+                                            className="mt-2 inline-flex w-full items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl text-sm font-semibold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                                        >
+                                            Log in
+                                        </button>
+                                        <p className="text-[11px] text-slate-500 text-center">
+                                            By logging in, you agree to use Amily gently and respectfully.
+                                        </p>
+                                    </form>
+                                </div>
+
+                                <div className="p-6 sm:p-8 text-sm bg-gradient-to-b from-rose-500/20 via-slate-950/60 to-slate-950/90 border-t md:border-t-0 md:border-l border-white/10 flex flex-col justify-between">
+                                    <div className="space-y-4">
+                                        <h3 className="text-slate-50 text-sm font-semibold">
+                                            Designed for older adults and their families
+                                        </h3>
+                                        <ul className="space-y-2 text-xs text-slate-200">
+                                            <li>• Large, legible text and calm colors.</li>
+                                            <li>• Simple, predictable navigation between sections.</li>
+                                            <li>• Supportive language that never feels robotic or cold.</li>
+                                        </ul>
+                                    </div>
+                                    <div className="mt-6 text-[11px] text-slate-400">
+                                        Have not set up an account yet? Use the Sign up tab to create a shared space for
+                                        your family.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        // Signup Page
+        function SignupPage({ darkMode, onAuthSuccess }) {
+            const [fullName, setFullName] = useState('');
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [supportedPerson, setSupportedPerson] = useState('Me');
+            const [accepted, setAccepted] = useState(false);
+            const [status, setStatus] = useState(null);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+
+                if (password !== confirmPassword) {
+                    setStatus({ type: 'error', message: 'Passwords do not match.' });
+                    return;
+                }
+
+                if (!accepted) {
+                    setStatus({ type: 'error', message: 'Please accept the understanding statement.' });
+                    return;
+                }
+
+                setStatus({ type: 'loading', message: 'Creating your account…' });
+
+                try {
+                    const res = await fetch('/api/auth/signup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email,
+                            password,
+                            fullName,
+                            supportedPerson,
+                        }),
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success) {
+                        setStatus({ type: 'error', message: data.error || 'Could not create your account.' });
+                    } else {
+                        setStatus({
+                            type: 'success',
+                            message: 'Account created. Please check your email to confirm, if required.',
+                        });
+                        if (onAuthSuccess) onAuthSuccess();
+                    }
+                } catch (err) {
+                    setStatus({ type: 'error', message: 'Network error while creating your account.' });
+                }
+            };
+
+            return (
+                <section id="signup" className="relative py-20">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex flex-col gap-3 mb-8 text-center sm:text-left">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-semibold uppercase tracking-[0.26em] mx-auto sm:mx-0 bg-black/5 backdrop-blur-sm">
+                                <UsersIcon />
+                                <span className={darkMode ? 'text-emerald-200' : 'text-emerald-700'}>Create an account</span>
+                            </div>
+                            <div className="space-y-1">
+                                <h2 className={`font-display text-3xl sm:text-4xl font-bold ${
+                                    darkMode ? 'text-slate-50' : 'text-slate-900'
+                                }`}>
+                                    Start your journey with Amily.
+                                </h2>
+                                <p className={darkMode ? 'text-slate-400 text-sm sm:text-base' : 'text-slate-600 text-sm sm:text-base'}>
+                                    Set up a safe, shared space where Amily can support you and your loved ones.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            className={`rounded-3xl border shadow-2xl overflow-hidden backdrop-blur-xl ${
+                                darkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-white/90 border-emerald-100'
+                            }`}
+                        >
+                            <div className="p-6 sm:p-8">
+                                <form className="space-y-5 max-w-xl mx-auto" onSubmit={handleSubmit}>
+                                    <div className="space-y-2">
+                                        <label
+                                            className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                        >
+                                            Full name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                            placeholder="For example: Maria Delgado"
+                                            className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                                                darkMode
+                                                    ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                    : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                            }`}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label
+                                            className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                        >
+                                            Email
+                                        </label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            placeholder="you@example.com"
+                                            className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                                                darkMode
+                                                    ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                    : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                            }`}
+                                        />
+                                    </div>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <label
+                                                className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                            >
+                                                Password
+                                            </label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                placeholder="Create a password"
+                                                className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                                                    darkMode
+                                                        ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                        : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                }`}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label
+                                                className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                            >
+                                                Confirm password
+                                            </label>
+                                            <input
+                                                type="password"
+                                                required
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                placeholder="Repeat your password"
+                                                className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                                                    darkMode
+                                                        ? 'border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500'
+                                                        : 'border border-slate-200 bg-white text-slate-900 placeholder-slate-400'
+                                                }`}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label
+                                            className={darkMode ? 'text-slate-200 text-xs font-semibold uppercase tracking-[0.18em]' : 'text-slate-600 text-xs font-semibold uppercase tracking-[0.18em]'}
+                                        >
+                                            Who is Amily primarily supporting?
+                                        </label>
+                                        <select
+                                            value={supportedPerson}
+                                            onChange={(e) => setSupportedPerson(e.target.value)}
+                                            className={`w-full px-4 py-3 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                                                darkMode
+                                                    ? 'border border-slate-700 bg-slate-950 text-slate-100'
+                                                    : 'border border-slate-200 bg-white text-slate-900'
+                                            }`}
+                                        >
+                                            <option value="Me">Me</option>
+                                            <option value="My parent">My parent</option>
+                                            <option value="My grandparent">My grandparent</option>
+                                            <option value="Other loved one">Other loved one</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-[11px] text-slate-400">
+                                        <input
+                                            type="checkbox"
+                                            required
+                                            checked={accepted}
+                                            onChange={(e) => setAccepted(e.target.checked)}
+                                            className="mt-0.5 rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500/60"
+                                        />
+                                        <span>
+                                            I understand that Amily is a supportive companion and does not provide medical,
+                                            legal, or crisis advice.
+                                        </span>
+                                    </div>
+                                    {status && (
+                                        <div
+                                            className={`text-xs rounded-2xl px-3 py-2 ${
+                                                status.type === 'success'
+                                                    ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-500/40'
+                                                    : status.type === 'error'
+                                                    ? 'bg-red-900/40 text-red-100 border border-red-500/40'
+                                                    : 'bg-slate-900/40 text-slate-200 border border-slate-700/40'
+                                            }`}
+                                        >
+                                            {status.message}
+                                        </div>
+                                    )}
+                                    <button
+                                        type="submit"
+                                        className="mt-2 inline-flex w-full items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl text-sm font-semibold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                                    >
+                                        Create account
+                                    </button>
+                                    <p className="text-[11px] text-slate-500 text-center">
+                                        You can add caregivers and family members later from your settings.
+                                    </p>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
         // Main App Component
         function App() {
             const [systemStatus] = useState('online');
             const darkMode = true; // Always dark mode
             const [currentPage, setCurrentPage] = useState('home');
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
 
             const handleNavigate = (pageId) => {
                 setCurrentPage(pageId);
@@ -1285,17 +1746,23 @@
                         ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
                         : 'bg-gradient-to-br from-rose-50 via-white to-orange-50'
                 }`}>
-                    <Navigation
-                        systemStatus={systemStatus}
-                        darkMode={darkMode}
-                        currentPage={currentPage}
-                        onNavigate={handleNavigate}
-                    />
+                    {isLoggedIn && (
+                        <Navigation
+                            systemStatus={systemStatus}
+                            darkMode={darkMode}
+                            currentPage={currentPage}
+                            onNavigate={handleNavigate}
+                            onLogout={() => {
+                                setIsLoggedIn(false);
+                                setCurrentPage('home');
+                            }}
+                        />
+                    )}
 
                     <main className="relative">
                         {currentPage === 'home' && (
                             <>
-                                <Hero darkMode={darkMode} onNavigate={handleNavigate} />
+                                <Hero darkMode={darkMode} isLoggedIn={isLoggedIn} onNavigate={handleNavigate} />
                                 <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                         {features.map((feature, index) => (
@@ -1311,6 +1778,24 @@
                         {currentPage === 'wellness' && <WellnessDemo darkMode={darkMode} />}
                         {currentPage === 'memories' && <MemoryDemo darkMode={darkMode} />}
                         {currentPage === 'empathy' && <EmpathyDemo darkMode={darkMode} />}
+                        {currentPage === 'login' && (
+                            <LoginPage
+                                darkMode={darkMode}
+                                onAuthSuccess={() => {
+                                    setIsLoggedIn(true);
+                                    setCurrentPage('home');
+                                }}
+                            />
+                        )}
+                        {currentPage === 'signup' && (
+                            <SignupPage
+                                darkMode={darkMode}
+                                onAuthSuccess={() => {
+                                    setIsLoggedIn(true);
+                                    setCurrentPage('home');
+                                }}
+                            />
+                        )}
 
                         <footer className="bg-gradient-to-r from-rose-500 to-orange-500 text-white py-12 mt-32">
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

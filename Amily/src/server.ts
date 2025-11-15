@@ -24,6 +24,8 @@ import {
   saveToSupabase,
   triggerN8NWorkflow,
   getUserPreferences,
+  signUpUser,
+  signInUser,
 } from './services';
 import {
   detectSafetyConcerns,
@@ -112,6 +114,80 @@ app.post('/api/checkin', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Something went wrong... let's try again in a moment.",
+    });
+  }
+});
+
+/**
+ * Auth: Sign up
+ */
+app.post('/api/auth/signup', async (req: Request, res: Response) => {
+  try {
+    const { email, password, fullName, supportedPerson } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required.',
+      });
+    }
+
+    const result = await signUpUser({ email, password, fullName, supportedPerson });
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Could not create account.',
+      });
+    }
+
+    res.json({
+      success: true,
+      userId: result.userId,
+      message: 'Account created. Please check your email to confirm if required.',
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Something went wrong while creating your account.',
+    });
+  }
+});
+
+/**
+ * Auth: Log in
+ */
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required.',
+      });
+    }
+
+    const result = await signInUser({ email, password });
+
+    if (!result.success) {
+      return res.status(401).json({
+        success: false,
+        error: result.error || 'Invalid email or password.',
+      });
+    }
+
+    res.json({
+      success: true,
+      userId: result.userId,
+      message: 'Logged in successfully.',
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Something went wrong while logging you in.',
     });
   }
 });

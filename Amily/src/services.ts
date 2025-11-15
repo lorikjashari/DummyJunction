@@ -6,9 +6,26 @@
 
 import { config } from './config';
 import type { PlanJSON, MemoryJSON, SummaryJSON } from './schemas';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Demo audio counter for generating unique placeholder URLs
 let demoAudioCounter = 1;
+
+// Supabase client (only initialized in prod mode when keys are present)
+let supabase: SupabaseClient | null = null;
+
+if (config.keys.supabaseUrl && config.keys.supabaseKey) {
+  try {
+    supabase = createClient(config.keys.supabaseUrl, config.keys.supabaseKey, {
+      auth: { persistSession: false },
+    });
+    console.log('💾 Supabase client initialized');
+  } catch (error) {
+    console.error('Failed to initialize Supabase client:', error);
+  }
+} else {
+  console.warn('Supabase URL/key missing – database features will use demo logging only.');
+}
 
 /**
  * ElevenLabs TTS Integration
@@ -119,23 +136,110 @@ function getDemoData(schema: string): PlanJSON | MemoryJSON | SummaryJSON {
  * Supabase Database Integration
  */
 export async function saveToSupabase(table: string, data: any): Promise<boolean> {
-  if (config.mode === 'demo') {
+  if (config.mode === 'demo' || !supabase) {
     console.log(`💾 [DEMO] Would save to Supabase table "${table}":`, data);
     return true;
   }
   
   // Production: Save to Supabase
   try {
-    // Placeholder for actual Supabase integration
-    // const { data, error } = await supabase
-    //   .from(table)
-    //   .insert(data);
-    
-    console.log(`💾 [PROD] Would save to Supabase table "${table}"`);
+    const { error } = await supabase.from(table).insert(data);
+    if (error) {
+      console.error(`Supabase insert error on table "${table}":`, error);
+      return false;
+    }
+
+    console.log(`💾 [PROD] Saved record to Supabase table "${table}"`);
     return true;
   } catch (error) {
     console.error('Supabase error:', error);
     return false;
+  }
+}
+
+/**
+ * Supabase Auth: Sign up a new user with email/password
+ */
+export async function signUpUser(params: {
+  email: string;
+  password: string;
+  fullName?: string;
+  supportedPerson?: string;
+}): Promise<{ success: boolean; userId?: string; error?: string }> {
+  if (!supabase) {
+    console.log('🔐 [DEMO] Would sign up user in Supabase:', {
+      email: params.email,
+      fullName: params.fullName,
+      supportedPerson: params.supportedPerson,
+    });
+    return { success: true, userId: 'demo-user' };
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: params.email,
+      password: params.password,
+      options: {
+        data: {
+          full_name: params.fullName ?? null,
+          supported_person: params.supportedPerson ?? null,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Supabase signUp error:', error);
+      return { success: false, error: error.message };
+    }
+
+    const userId = data.user?.id;
+
+    // Optionally create a preferences row for this user
+    if (userId) {
+      await saveToSupabase('user_preferences', {
+        user_id: userId,
+        preferred_pace: 'slow',
+        favorite_time: 'morning',
+        interests: [],
+        routine_notes: null,
+      });
+    }
+
+    return { success: true, userId };
+  } catch (error: any) {
+    console.error('Unexpected signUp error:', error);
+    return { success: false, error: 'Unable to sign up right now.' };
+  }
+}
+
+/**
+ * Supabase Auth: Log in an existing user with email/password
+ */
+export async function signInUser(params: {
+  email: string;
+  password: string;
+}): Promise<{ success: boolean; userId?: string; error?: string }> {
+  if (!supabase) {
+    console.log('🔐 [DEMO] Would sign in user in Supabase:', { email: params.email });
+    return { success: true, userId: 'demo-user' };
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: params.email,
+      password: params.password,
+    });
+
+    if (error) {
+      console.error('Supabase signIn error:', error);
+      return { success: false, error: error.message };
+    }
+
+    const userId = data.user?.id;
+    return { success: true, userId };
+  } catch (error: any) {
+    console.error('Unexpected signIn error:', error);
+    return { success: false, error: 'Unable to log in right now.' };
   }
 }
 
@@ -172,7 +276,7 @@ export async function triggerN8NWorkflow(
  * Get user preferences from Supabase
  */
 export async function getUserPreferences(userId: string): Promise<any> {
-  if (config.mode === 'demo') {
+  if (config.mode === 'demo' || !supabase) {
     return {
       preferredPace: 'slow',
       favoriteTime: 'morning',
@@ -183,17 +287,18 @@ export async function getUserPreferences(userId: string): Promise<any> {
   
   // Production: Fetch from Supabase
   try {
-    // const { data } = await supabase
-    //   .from('user_preferences')
-    //   .select('*')
-    //   .eq('user_id', userId)
-    //   .single();
+    const { data, error } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
     
-    return {
-      preferredPace: 'slow',
-      favoriteTime: 'morning',
-      interests: [],
-    };
+    if (error) {
+      console.error('Failed to fetch user preferences from Supabase:', error);
+      return {};
+    }
+
+    return data || {};
   } catch (error) {
     console.error('Failed to fetch user preferences:', error);
     return {};
